@@ -1,0 +1,119 @@
+import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+import { authMiddleware, adminOnly } from '../middleware/auth';
+import { getManagementToken, addPermissionsToUser } from '../lib/auth0';
+import { ApiError, type HonoEnv } from '../types';
+
+const app = new OpenAPIHono<HonoEnv>();
+
+const auth0TokenRoute = createRoute({
+  method: 'post',
+  path: '/token',
+  tags: ['Auth0'],
+  summary: 'Retrieve an Auth0 Management API token',
+  description: 'Calls Auth0 using the client_credentials grant, caches the '
+    + 'result and returns the raw access token (for use by admin UIs).',
+  security: [{ bearerAuth: [] }],
+  middleware: [authMiddleware, adminOnly] as const,
+  responses: {
+    200: { description: 'Token acquired' },
+    401: { description: 'Unauthorized' },
+    500: { description: 'Internal error' },
+  },
+});
+
+app.openapi(auth0TokenRoute, async (c) => {
+  try {
+    const token = await getManagementToken(c.env);
+
+    // decode expiration if available
+    let exp: number | undefined;
+    try {
+      const { decodeJwt } = await import('jose');
+      const decoded = decodeJwt(token);
+      exp = (decoded.exp as number | undefined) || undefined;
+    } catch (_e) {
+      // ignore
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    return c.json(
+      {
+        access_token: token,
+        token_type: 'Bearer',
+        expires_in: exp ? exp - now : 3600,
+        from_cache: true,
+      },
+      200,
+    );
+  } catch (error) {
+    return c.json({ success: false, error: String(error) }, 500);
+  }
+});
+
+const autoPermsRoute = createRoute({
+  method: 'post',
+  path: '/autopermissions',
+  tags: ['Auth0'],
+  summary: 'Auto-assign configured permissions to caller',
+  description: 'Reads `AUTH0_AUTOMATIC_PERMISSIONS` and adds any missing '
+    + 'values to the current Auth0 user via the Management API.',
+  security: [{ bearerAuth: [] }],
+  middleware: [authMiddleware] as const,
+  responses: {
+    200: { description: 'Success' },
+    401: { description: 'Unauthorized' },
+    500: { description: 'Error' },
+  },
+});
+
+app.openapi(autoPermsRoute, async (c) => {
+  try {
+    const perms = (c.env.AUTH0_AUTOMATIC_PERMISSIONS || '')
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p);
+
+    if (perms.length === 0) {
+      return c.json({ success: true, message: 'No automatic permissions configured' }, 200);
+    }
+
+    const currentPerms = (c.get('auth') as any)?.oauthScopes || [];
+    const missing = perms.filter((p) => !currentPerms.includes(p));
+    if (missing.length === 0) {
+      return c.json({ success: true, message: 'User already has all automatic permissions' }, 200);
+    }
+
+    const sub = (c.get('auth') as any)?.customerEmail || ''; // we don't actually store sub earlier
+    // In our auth middleware payload not stored; simpler: grab JWT payload
+    // from header by re-verifying.
+    const authHeader = c.req.header('Authorization') || '';
+    const token = authHeader.replace('Bearer ', '');
+
+    if (!token) {
+      throw new Error('no token present');
+    }
+
+    // extract user id from JWT payload
+    const { jwtVerify, createRemoteJWKSet } = await import('jose');
+    const jwksUrl = `https://${c.env.AUTH0_DOMAIN}/.well-known/jwks.json`;
+    const JWKS = createRemoteJWKSet(new URL(jwksUrl));
+    const result = await jwtVerify(token, JWKS, {
+      issuer: `https://${c.env.AUTH0_DOMAIN}/`,
+      audience: c.env.AUTH0_AUDIENCE,
+    });
+    const userId = result.payload.sub as string;
+
+    if (!userId) {
+      throw new Error('User ID not found in token');
+    }
+
+    await addPermissionsToUser(userId, missing, c.env);
+
+    return c.json({ success: true, added: missing }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: String(err) }, 500);
+  }
+});
+
+export { app as auth0Routes };

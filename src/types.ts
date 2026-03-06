@@ -7,6 +7,37 @@ export type Env = {
   STORE_NAME?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+
+  /**
+   * Domain configured in Auth0 (e.g. `your-tenant.auth0.com`).
+   * Required when validating JWTs issued by Auth0.
+   */
+  AUTH0_DOMAIN?: string;
+
+  /**
+   * Expected audience claim for incoming JWTs. Typically the API identifier
+   * configured in your Auth0 application settings.
+   */
+  AUTH0_AUDIENCE?: string;
+
+  /**
+   * Permission string required on incoming Auth0 tokens to be treated as an
+   * admin user.  Defaults to `admin:store` when not set.
+   */
+  ADMIN_STORE_PERMISSION?: string;
+
+  /**
+   * Permission string used to guard the `/api/__auth0/token` endpoint.  Any
+   * caller must be authenticated and have this permission to request a Management
+   * API token.  If unset the route is open to admins only.
+   */
+  ADMIN_AUTH0_PERMISSION?: string;
+
+  /**
+   * Comma-separated list of permissions to automatically assign to the current
+   * user when hitting `/api/__auth0/autopermissions`.
+   */
+  AUTH0_AUTOMATIC_PERMISSIONS?: string;
 };
 
 export type DOStub = {

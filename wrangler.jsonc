@@ -24,7 +24,12 @@
       "binding": "IMAGES"
     }
   ],
-
+	"kv_namespaces": [
+		{
+			"binding": "KV_CACHE",
+			"id": "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+		}
+	],
   "vars": {
     "IMAGES_URL": ""
   },

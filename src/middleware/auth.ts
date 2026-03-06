@@ -45,6 +45,67 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
     }
   }
 
+  // ------------------------------------------------------------------
+  // Auth0 JWT support
+  // ------------------------------------------------------------------
+  // When the Authorization header contains a standard JWT (three dot-joined
+  // segments) and the token does **not** start with our API key prefixes, we
+  // treat it as an Auth0 access token.  The token must:
+  //   1. validate against the Auth0 tenant's JWKS
+  //   2. include the expected audience claim (from AUTH0_AUDIENCE)
+  //   3. carry the `admin:store` permission in the `permissions` array
+  //
+  // This allows browser clients obtaining Auth0 tokens to call the same
+  // endpoints as the legacy API key system, with a single `admin` role.
+  //
+  // detect values with the three-part JWT structure (header.payload.signature)
+  // while skipping API keys that might accidentally contain dots.
+  if (
+    token.split('.').length === 3 &&
+    !token.startsWith('pk_') &&
+    !token.startsWith('sk_')
+  ) {
+    const { verifyAuth0Jwt } = await import('../lib/auth0');
+
+    const domain = c.env.AUTH0_DOMAIN;
+    const audience = c.env.AUTH0_AUDIENCE;
+
+    if (!domain || !audience) {
+      throw ApiError.unauthorized('Auth0 not configured on server');
+    }
+
+    let payload;
+    try {
+      payload = await verifyAuth0Jwt(token, domain, audience);
+    } catch (err) {
+      console.error('JWT verification failed', err);
+      throw ApiError.unauthorized('Invalid Auth0 JWT');
+    }
+
+    const perms = Array.isArray(payload.permissions)
+      ? (payload.permissions as unknown[]).map(String)
+      : [];
+
+    // permission required for admin access is driven by an environment
+    // variable so it can be changed without a deploy.  fall back to the
+    // historical value for backward compatibility.
+    const requiredPerm = c.env.ADMIN_STORE_PERMISSION || 'admin:store';
+
+    if (!perms.includes(requiredPerm)) {
+      throw ApiError.forbidden(`${requiredPerm} permission required`);
+    }
+
+    // treat a valid Auth0 token as an admin user
+    c.set('auth', {
+      role: 'admin',
+      stripeSecretKey,
+      stripeWebhookSecret,
+    });
+
+    await next();
+    return;
+  }
+
   const keyHash = await hashKey(token);
   const result = await db.query<any>(
     `SELECT role FROM api_keys WHERE key_hash = ? LIMIT 1`,
