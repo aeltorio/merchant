@@ -87,6 +87,10 @@ export const ProductQuery = PaginationQuery.extend({
   status: ProductStatus.optional().openapi({ param: { name: 'status', in: 'query' } }),
 });
 
+export const SearchQuery = PaginationQuery.extend({
+  q: z.string().min(1).openapi({ param: { name: 'q', in: 'query' }, example: 'shirt' }),
+});
+
 // ============================================================
 // INVENTORY SCHEMAS
 // ============================================================

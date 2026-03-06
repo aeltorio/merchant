@@ -2,6 +2,7 @@
   "name": "merchant-example-store",
   "private": true,
   "scripts": {
+    "dev:env": "bash -c 'cp ../../../.env .dev.vars && npx serve -p 3000'",
     "dev": "npx serve -p 3000",
     "start": "npx serve -p 3000"
   }

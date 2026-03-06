@@ -10,6 +10,7 @@ import {
   CreateProductBody,
   UpdateProductBody,
   ProductQuery,
+  SearchQuery,
   VariantResponse,
   CreateVariantBody,
   UpdateVariantBody,
@@ -38,6 +39,18 @@ const listProducts = createRoute({
   },
 });
 
+const searchProducts = createRoute({
+  method: 'get',
+  path: '/search',
+  tags: ['Products'],
+  summary: 'Search products by term (fuzzy)',
+  security: [{ bearerAuth: [] }],
+  request: { query: SearchQuery },
+  responses: {
+    200: { content: { 'application/json': { schema: ProductListResponse } }, description: 'Search results' },
+  },
+});
+
 app.openapi(listProducts, async (c) => {
   const db = getDb(c.var.db);
   const { limit: limitStr, cursor, status } = c.req.valid('query');
@@ -61,6 +74,69 @@ app.openapi(listProducts, async (c) => {
   }
 
   query += ` ORDER BY created_at DESC LIMIT ?`;
+  params.push(limit + 1);
+
+  const products = await db.query<any>(query, params);
+  const hasMore = products.length > limit;
+  if (hasMore) products.pop();
+
+  const productIds = products.map((p) => p.id);
+  const variantsByProduct: Record<string, any[]> = {};
+
+  if (productIds.length > 0) {
+    const placeholders = productIds.map(() => '?').join(',');
+    const allVariants = await db.query<any>(
+      `SELECT * FROM variants WHERE product_id IN (${placeholders}) ORDER BY created_at ASC`,
+      productIds
+    );
+
+    for (const v of allVariants) {
+      if (!variantsByProduct[v.product_id]) {
+        variantsByProduct[v.product_id] = [];
+      }
+      variantsByProduct[v.product_id].push(v);
+    }
+  }
+
+  const items = products.map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    status: p.status,
+    created_at: p.created_at,
+    variants: (variantsByProduct[p.id] || []).map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      title: v.title,
+      price_cents: v.price_cents,
+      image_url: v.image_url,
+    })),
+  }));
+
+  const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].created_at : null;
+
+  return c.json({ items, pagination: { has_more: hasMore, next_cursor: nextCursor } }, 200);
+});
+
+app.openapi(searchProducts, async (c) => {
+  const db = getDb(c.var.db);
+  const { q, limit: limitStr, cursor } = c.req.valid('query');
+  const limit = Math.min(parseInt(limitStr || '20'), 100);
+
+  const term = `%${q}%`;
+
+  // join with variants to allow SKU matching
+  let query = `SELECT DISTINCT p.* FROM products p
+    LEFT JOIN variants v ON v.product_id = p.id
+    WHERE (p.title LIKE ? OR v.sku LIKE ?)`;
+  const params: unknown[] = [term, term];
+
+  if (cursor) {
+    query += ` AND p.created_at < ?`;
+    params.push(cursor);
+  }
+
+  query += ` ORDER BY p.created_at DESC LIMIT ?`;
   params.push(limit + 1);
 
   const products = await db.query<any>(query, params);
