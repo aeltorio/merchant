@@ -12,7 +12,7 @@ const auth0TokenRoute = createRoute({
   summary: 'Retrieve an Auth0 Management API token',
   description: 'Calls Auth0 using the client_credentials grant, caches the '
     + 'result and returns the raw access token (for use by admin UIs).',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["admin:store"] }],
   middleware: [authMiddleware, adminOnly] as const,
   responses: {
     200: { description: 'Token acquired' },
@@ -58,7 +58,7 @@ const autoPermsRoute = createRoute({
   summary: 'Auto-assign configured permissions to caller',
   description: 'Reads `AUTH0_AUTOMATIC_PERMISSIONS` and adds any missing '
     + 'values to the current Auth0 user via the Management API.',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["admin:store"] }],
   middleware: [authMiddleware] as const,
   responses: {
     200: { description: 'Success' },
@@ -111,6 +111,46 @@ app.openapi(autoPermsRoute, async (c) => {
     await addPermissionsToUser(userId, missing, c.env);
 
     return c.json({ success: true, added: missing }, 200);
+  } catch (err) {
+    return c.json({ success: false, error: String(err) }, 500);
+  }
+});
+
+
+// debug info route mirroring /api/get/<user> from index.ts
+const debugUserRoute = createRoute({
+  method: 'get',
+  path: '/get/:user',
+  tags: ['Auth0'],
+  summary: 'Debug request info (admin:store)',
+  description: 'Returns detailed session and request info. Required permission: admin:store',
+  security: [{ bearerAuth: ['admin:store'] }],
+  middleware: [authMiddleware] as const,
+  parameters: [
+    {
+      in: 'path',
+      name: 'user',
+      required: true,
+      schema: {
+        type: 'string',
+      },
+      description: 'Dynamic user parameter.',
+    },
+  ] as const,
+  responses: {
+    200: { description: 'Success' },
+    401: { description: 'Unauthorized' },
+  },
+});
+
+app.openapi(debugUserRoute, async (c) => {
+  try {
+    const user = c.req.param('user') || '';
+    const sub = (c.get('auth') as any)?.sub || '';
+    const permissions = (c.get('auth') as any)?.oauthScopes || [];
+    const token = (c.req.header('Authorization') || '').replace('Bearer ', '');
+
+    return c.json({ success: true, user, sub, permissions, token }, 200);
   } catch (err) {
     return c.json({ success: false, error: String(err) }, 500);
   }
