@@ -7,6 +7,30 @@
  *   npx tsx scripts/seed.ts http://localhost:8787 sk_...
  */
 
+// images are embedded as base64 so this file can run even after the PNGs are removed
+import { imageMap } from './image_map';
+
+// helper converting SKUs to the filenames we generated above
+const skuToImage: Record<string, string> = {
+  // tee variants all use the same image regardless of size
+  'TEE-BLK-S': 'tee-black.png',
+  'TEE-BLK-M': 'tee-black.png',
+  'TEE-BLK-L': 'tee-black.png',
+  'TEE-WHT-S': 'tee-white.png',
+  'TEE-WHT-M': 'tee-white.png',
+  'TEE-WHT-L': 'tee-white.png',
+  // hoodies share by colour
+  'HOOD-BLK-M': 'hoodie-black.png',
+  'HOOD-BLK-L': 'hoodie-black.png',
+  'HOOD-GRY-M': 'hoodie-white.png',
+  'HOOD-GRY-L': 'hoodie-white.png',
+  // caps
+  'CAP-BLK': 'cap-black.png',
+  'CAP-NVY': 'cap-navy.png',
+  // sticker pack
+  'STICKER-5PK': 'stickers.png',
+};
+
 const API_URL = process.argv[2] || 'http://localhost:8787';
 const API_KEY = process.argv[3];
 
@@ -93,6 +117,13 @@ async function seed() {
 
     for (const v of variants[prod.title]) {
       const { stock, ...variant } = v;
+
+      // attach an image if we know which file corresponds to this SKU
+      const imgFile = skuToImage[variant.sku];
+      if (imgFile) {
+        variant.image_url = imageMap[imgFile];
+      }
+
       console.log(`   └─ ${variant.sku}`);
 
       await api(`/v1/products/${product.id}/variants`, variant);
