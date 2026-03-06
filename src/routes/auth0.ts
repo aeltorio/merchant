@@ -117,7 +117,7 @@ app.openapi(autoPermsRoute, async (c) => {
 });
 
 
-// debug info route mirroring /api/get/<user> from index.ts
+// debug info route providing request details (moved out of worker index)
 const debugUserRoute = createRoute({
   method: 'get',
   path: '/get/:user',
