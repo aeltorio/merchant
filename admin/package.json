@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev:env": "bash -c 'set -a && source ../../../.env && set +a && vite --port 5174'",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
