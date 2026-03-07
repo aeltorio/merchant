@@ -19,7 +19,7 @@ export const rateLimits = {
   // Per role overrides
   roles: {
     admin: {
-      requests: 500,
+      requests: 2000,
       windowMs: 60 * 1000,
     },
     public: {

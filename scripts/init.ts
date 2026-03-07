@@ -1,5 +1,13 @@
 #!/usr/bin/env npx tsx
 
+import path from 'path';
+import { config as loadEnv } from 'dotenv';
+
+// calculate directory of current module (ESM compatible)
+const __dirname = path.dirname(new URL(import.meta.url).pathname);
+// load .env from workspace root (three levels up)
+loadEnv({ path: path.resolve(__dirname, '../../..', '.env') });
+
 async function hashKey(key: string): Promise<string> {
   const data = new TextEncoder().encode(key);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -31,8 +39,15 @@ async function init() {
     console.log('   MERCHANT_URL=https://merchant.example.com npx tsx scripts/init.ts --remote\n');
   }
 
-  const publicKey = generateApiKey('pk');
-  const adminKey = generateApiKey('sk');
+  // if the keys are provided via environment we reuse them instead of generating new ones
+  let publicKey = process.env.MERCHANT_PK || '';
+  let adminKey = process.env.MERCHANT_SK || '';
+
+  if (!publicKey || !adminKey) {
+    publicKey = generateApiKey('pk');
+    adminKey = generateApiKey('sk');
+  }
+
   const publicHash = await hashKey(publicKey);
   const adminHash = await hashKey(adminKey);
   const publicId = crypto.randomUUID();

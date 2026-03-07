@@ -9,6 +9,11 @@ import {
   InventoryItem,
   SkuParam,
   AdjustInventoryBody,
+  WarehouseInventoryQuery,
+  WarehouseInventoryListResponse,
+  AdjustWarehouseInventoryBody,
+  WarehouseInventoryItem,
+  RegionalInventoryQuery,
   ErrorResponse,
 } from '../schemas';
 
@@ -181,6 +186,243 @@ app.openapi(adjustInventory, async (c) => {
     on_hand: level.on_hand,
     reserved: level.reserved,
     available,
+  }, 200);
+});
+
+// ============================================================
+// WAREHOUSE INVENTORY ROUTES
+// ============================================================
+
+const listWarehouseInventory = createRoute({
+  method: 'get',
+  path: '/warehouse',
+  tags: ['Inventory - Warehouse'],
+  summary: 'List warehouse inventory levels',
+  description: 'List inventory levels across warehouses with optional filters',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  request: { query: WarehouseInventoryQuery },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: WarehouseInventoryListResponse } },
+      description: 'List of warehouse inventory levels',
+    },
+  },
+});
+
+app.openapi(listWarehouseInventory, async (c) => {
+  const { sku, warehouse_id, limit: limitStr, cursor, low_stock } = c.req.valid('query');
+  const db = getDb(c.var.db);
+  const limit = Math.min(parseInt(limitStr || '100'), 500);
+
+  let query = `SELECT wi.*, w.display_name as warehouse_name, v.title as variant_title, p.title as product_title
+     FROM warehouse_inventory wi
+     LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+     LEFT JOIN variants v ON wi.sku = v.sku
+     LEFT JOIN products p ON v.product_id = p.id
+     WHERE 1=1`;
+  const params: unknown[] = [];
+
+  if (sku) {
+    query += ` AND wi.sku = ?`;
+    params.push(sku);
+  }
+  if (warehouse_id) {
+    query += ` AND wi.warehouse_id = ?`;
+    params.push(warehouse_id);
+  }
+  if (low_stock === 'true') {
+    query += ` AND (wi.on_hand - wi.reserved) <= 10`;
+  }
+  if (cursor) {
+    query += ` AND wi.id > ?`;
+    params.push(cursor);
+  }
+
+  query += ` ORDER BY wi.sku, w.priority LIMIT ?`;
+  params.push(limit + 1);
+
+  const items = await db.query<any>(query, params);
+  const hasMore = items.length > limit;
+  if (hasMore) items.pop();
+
+  return c.json({
+    items: items.map((i) => ({
+      sku: i.sku,
+      warehouse_id: i.warehouse_id,
+      warehouse_name: i.warehouse_name,
+      on_hand: i.on_hand,
+      reserved: i.reserved,
+      available: i.on_hand - i.reserved,
+      variant_title: i.variant_title,
+      product_title: i.product_title,
+    })),
+    pagination: {
+      has_more: hasMore,
+      next_cursor: hasMore && items.length > 0 ? items[items.length - 1].id : null,
+    },
+  }, 200);
+});
+
+const adjustWarehouseInventory = createRoute({
+  method: 'post',
+  path: '/{sku}/warehouse-adjust',
+  tags: ['Inventory - Warehouse'],
+  summary: 'Adjust warehouse inventory level',
+  description: 'Add or subtract inventory for a SKU at a specific warehouse',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  request: {
+    params: SkuParam,
+    body: { content: { 'application/json': { schema: AdjustWarehouseInventoryBody } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: WarehouseInventoryItem } },
+      description: 'Updated warehouse inventory level',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'Invalid request (e.g., would go below 0)',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'SKU or warehouse not found',
+    },
+  },
+});
+
+app.openapi(adjustWarehouseInventory, async (c) => {
+  const { sku } = c.req.valid('param');
+  const { warehouse_id, delta, reason } = c.req.valid('json');
+  const db = getDb(c.var.db);
+
+  // Verify warehouse exists
+  const [warehouse] = await db.query<any>(`SELECT * FROM warehouses WHERE id = ?`, [warehouse_id]);
+  if (!warehouse) throw ApiError.notFound('Warehouse not found');
+
+  // Verify SKU exists
+  const [variant] = await db.query<any>(`SELECT * FROM variants WHERE sku = ?`, [sku]);
+  if (!variant) throw ApiError.notFound('SKU not found');
+
+  // Get or create warehouse inventory record
+  let [existing] = await db.query<any>(
+    `SELECT * FROM warehouse_inventory WHERE sku = ? AND warehouse_id = ?`,
+    [sku, warehouse_id]
+  );
+
+  if (!existing) {
+    // Create new warehouse inventory record
+    const id = uuid();
+    await db.run(
+      `INSERT INTO warehouse_inventory (id, sku, warehouse_id, on_hand, reserved, updated_at) VALUES (?, ?, ?, 0, 0, ?)`,
+      [id, sku, warehouse_id, now()]
+    );
+    existing = { id, sku, warehouse_id, on_hand: 0, reserved: 0 };
+  }
+
+  if (delta < 0 && existing.on_hand + delta < 0) {
+    throw ApiError.invalidRequest(
+      `Cannot reduce inventory below 0. Current on_hand: ${existing.on_hand}`
+    );
+  }
+
+  await db.run(
+    `UPDATE warehouse_inventory SET on_hand = on_hand + ?, updated_at = ? WHERE sku = ? AND warehouse_id = ?`,
+    [delta, now(), sku, warehouse_id]
+  );
+
+  await db.run(
+    `INSERT INTO warehouse_inventory_logs (id, sku, warehouse_id, delta, reason) VALUES (?, ?, ?, ?, ?)`,
+    [uuid(), sku, warehouse_id, delta, reason]
+  );
+
+  const [level] = await db.query<any>(
+    `SELECT wi.*, w.display_name as warehouse_name FROM warehouse_inventory wi
+     LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+     WHERE wi.sku = ? AND wi.warehouse_id = ?`,
+    [sku, warehouse_id]
+  );
+
+  const available = level.on_hand - level.reserved;
+
+  // Check low inventory at warehouse level
+  await checkLowInventory(c.var.db, c.executionCtx, sku, available);
+
+  return c.json({
+    sku: level.sku,
+    warehouse_id: level.warehouse_id,
+    warehouse_name: level.warehouse_name,
+    on_hand: level.on_hand,
+    reserved: level.reserved,
+    available,
+  }, 200);
+});
+
+const getRegionalInventory = createRoute({
+  method: 'get',
+  path: '/{sku}/regional',
+  tags: ['Inventory - Warehouse'],
+  summary: 'Get regional inventory',
+  description: 'Get aggregated inventory for a SKU across all warehouses in a region',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  request: {
+    params: SkuParam,
+    query: RegionalInventoryQuery,
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: WarehouseInventoryItem } },
+      description: 'Regional inventory summary',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'SKU or region not found',
+    },
+  },
+});
+
+app.openapi(getRegionalInventory, async (c) => {
+  const { sku } = c.req.valid('param');
+  const { region_id } = c.req.valid('query');
+  const db = getDb(c.var.db);
+
+  // Verify region exists
+  const [region] = await db.query<any>('SELECT * FROM regions WHERE id = ?', [region_id]);
+  if (!region) throw ApiError.notFound('Region not found');
+
+  // Verify SKU exists
+  const [variant] = await db.query<any>('SELECT * FROM variants WHERE sku = ?', [sku]);
+  if (!variant) throw ApiError.notFound('SKU not found');
+
+  // Get warehouse inventory for this region
+  const warehouses = await db.query<any>(
+    `SELECT wi.*, w.display_name as warehouse_name
+     FROM warehouse_inventory wi
+     JOIN region_warehouses rw ON wi.warehouse_id = rw.warehouse_id
+     WHERE wi.sku = ? AND rw.region_id = ?
+     ORDER BY w.priority`,
+    [sku, region_id]
+  );
+
+  const totalOnHand = warehouses.reduce((sum, w) => sum + w.on_hand, 0);
+  const totalReserved = warehouses.reduce((sum, w) => sum + w.reserved, 0);
+  const totalAvailable = totalOnHand - totalReserved;
+
+  return c.json({
+    sku,
+    region_id,
+    total_on_hand: totalOnHand,
+    total_reserved: totalReserved,
+    total_available: totalAvailable,
+    warehouses: warehouses.map((w) => ({
+      warehouse_id: w.warehouse_id,
+      warehouse_name: w.warehouse_name,
+      on_hand: w.on_hand,
+      reserved: w.reserved,
+      available: w.on_hand - w.reserved,
+    })),
   }, 200);
 });
 

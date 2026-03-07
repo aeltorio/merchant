@@ -34,6 +34,119 @@ CREATE TABLE IF NOT EXISTS api_keys (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ============================================================
+-- MULTI-REGION FOUNDATIONAL TABLES (must be before carts/orders)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS currencies (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  symbol TEXT NOT NULL DEFAULT '$',
+  decimal_places INTEGER NOT NULL DEFAULT 2,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS countries (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  display_name TEXT NOT NULL,
+  country_name TEXT NOT NULL,
+  language_code TEXT NOT NULL DEFAULT 'en',
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS warehouses (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  address_line1 TEXT NOT NULL,
+  address_line2 TEXT,
+  city TEXT NOT NULL,
+  state TEXT,
+  postal_code TEXT NOT NULL,
+  country_code TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS shipping_rates (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  description TEXT,
+  max_weight_g INTEGER,
+  min_delivery_days INTEGER,
+  max_delivery_days INTEGER,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS shipping_rate_prices (
+  id TEXT PRIMARY KEY,
+  shipping_rate_id TEXT NOT NULL REFERENCES shipping_rates(id) ON DELETE CASCADE,
+  currency_id TEXT NOT NULL REFERENCES currencies(id) ON DELETE CASCADE,
+  amount_cents INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(shipping_rate_id, currency_id)
+);
+
+CREATE TABLE IF NOT EXISTS regions (
+  id TEXT PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  currency_id TEXT NOT NULL REFERENCES currencies(id),
+  is_default INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS region_countries (
+  region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+  country_id TEXT NOT NULL REFERENCES countries(id) ON DELETE CASCADE,
+  PRIMARY KEY (region_id, country_id)
+);
+
+CREATE TABLE IF NOT EXISTS region_warehouses (
+  region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+  warehouse_id TEXT NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+  PRIMARY KEY (region_id, warehouse_id)
+);
+
+CREATE TABLE IF NOT EXISTS region_shipping_rates (
+  region_id TEXT NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
+  shipping_rate_id TEXT NOT NULL REFERENCES shipping_rates(id) ON DELETE CASCADE,
+  PRIMARY KEY (region_id, shipping_rate_id)
+);
+
+CREATE TABLE IF NOT EXISTS warehouse_inventory (
+  id TEXT PRIMARY KEY,
+  sku TEXT NOT NULL,
+  warehouse_id TEXT NOT NULL REFERENCES warehouses(id) ON DELETE CASCADE,
+  on_hand INTEGER NOT NULL DEFAULT 0,
+  reserved INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(sku, warehouse_id)
+);
+
+CREATE TABLE IF NOT EXISTS warehouse_inventory_logs (
+  id TEXT PRIMARY KEY,
+  sku TEXT NOT NULL,
+  warehouse_id TEXT NOT NULL REFERENCES warehouses(id),
+  delta INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (reason IN ('restock', 'correction', 'damaged', 'return', 'sale', 'release')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
+-- CORE PRODUCT TABLES
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -57,6 +170,16 @@ CREATE TABLE IF NOT EXISTS variants (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS variant_prices (
+  id TEXT PRIMARY KEY,
+  variant_id TEXT NOT NULL REFERENCES variants(id) ON DELETE CASCADE,
+  currency_id TEXT NOT NULL REFERENCES currencies(id) ON DELETE CASCADE,
+  price_cents INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(variant_id, currency_id)
+);
+
 CREATE TABLE IF NOT EXISTS inventory (
   id TEXT PRIMARY KEY,
   sku TEXT NOT NULL UNIQUE,
@@ -73,15 +196,22 @@ CREATE TABLE IF NOT EXISTS inventory_logs (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ============================================================
+-- CARTS & ORDERS (now safe - regions/warehouses exist)
+-- ============================================================
+
 CREATE TABLE IF NOT EXISTS carts (
   id TEXT PRIMARY KEY,
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'checked_out', 'expired')),
   customer_email TEXT NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
+  region_id TEXT,
   stripe_checkout_session_id TEXT,
   discount_code TEXT,
-  discount_id TEXT REFERENCES discounts(id),
+  discount_id TEXT,
   discount_amount_cents INTEGER DEFAULT 0,
+  shipping_rate_id TEXT,
+  shipping_cents INTEGER DEFAULT 0,
   expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -98,44 +228,29 @@ CREATE TABLE IF NOT EXISTS cart_items (
 
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
-  customer_id TEXT REFERENCES customers(id),
+  customer_id TEXT,
   number TEXT NOT NULL UNIQUE,
   status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('pending', 'paid', 'processing', 'shipped', 'delivered', 'refunded', 'canceled')),
   customer_email TEXT NOT NULL,
+  region_id TEXT,
+  warehouse_id TEXT,
   shipping_name TEXT,
   shipping_phone TEXT,
   ship_to TEXT,
   subtotal_cents INTEGER NOT NULL,
   tax_cents INTEGER NOT NULL,
   shipping_cents INTEGER NOT NULL DEFAULT 0,
+  shipping_rate_id TEXT,
   total_cents INTEGER NOT NULL,
   currency TEXT NOT NULL DEFAULT 'USD',
   discount_code TEXT,
-  discount_id TEXT REFERENCES discounts(id),
+  discount_id TEXT,
   discount_amount_cents INTEGER DEFAULT 0,
   tracking_number TEXT,
   tracking_url TEXT,
   shipped_at TEXT,
   stripe_checkout_session_id TEXT,
   stripe_payment_intent_id TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE TABLE IF NOT EXISTS order_items (
-  id TEXT PRIMARY KEY,
-  order_id TEXT NOT NULL REFERENCES orders(id),
-  sku TEXT NOT NULL,
-  title TEXT NOT NULL,
-  qty INTEGER NOT NULL,
-  unit_price_cents INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS refunds (
-  id TEXT PRIMARY KEY,
-  order_id TEXT NOT NULL REFERENCES orders(id),
-  stripe_refund_id TEXT NOT NULL,
-  amount_cents INTEGER NOT NULL,
-  status TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -156,6 +271,24 @@ CREATE TABLE IF NOT EXISTS discounts (
   stripe_promotion_code_id TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL REFERENCES orders(id),
+  sku TEXT NOT NULL,
+  title TEXT NOT NULL,
+  qty INTEGER NOT NULL,
+  unit_price_cents INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS refunds (
+  id TEXT PRIMARY KEY,
+  order_id TEXT NOT NULL REFERENCES orders(id),
+  stripe_refund_id TEXT NOT NULL,
+  amount_cents INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS discount_usage (
@@ -335,16 +468,52 @@ CREATE INDEX IF NOT EXISTS idx_events_type_processed ON events(type, processed_a
 CREATE INDEX IF NOT EXISTS idx_ucp_checkout_sessions_status ON ucp_checkout_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_ucp_checkout_sessions_stripe ON ucp_checkout_sessions(stripe_session_id);
 CREATE INDEX IF NOT EXISTS idx_ucp_checkout_sessions_expires ON ucp_checkout_sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_currencies_code ON currencies(code);
+CREATE INDEX IF NOT EXISTS idx_currencies_status ON currencies(status);
+CREATE INDEX IF NOT EXISTS idx_countries_code ON countries(code);
+CREATE INDEX IF NOT EXISTS idx_countries_status ON countries(status);
+CREATE INDEX IF NOT EXISTS idx_warehouses_status ON warehouses(status);
+CREATE INDEX IF NOT EXISTS idx_warehouses_priority ON warehouses(priority);
+CREATE INDEX IF NOT EXISTS idx_shipping_rates_status ON shipping_rates(status);
+CREATE INDEX IF NOT EXISTS idx_regions_status ON regions(status);
+CREATE INDEX IF NOT EXISTS idx_regions_default ON regions(is_default);
+CREATE INDEX IF NOT EXISTS idx_regions_currency ON regions(currency_id);
+CREATE INDEX IF NOT EXISTS idx_region_countries_region ON region_countries(region_id);
+CREATE INDEX IF NOT EXISTS idx_region_countries_country ON region_countries(country_id);
+CREATE INDEX IF NOT EXISTS idx_region_warehouses_region ON region_warehouses(region_id);
+CREATE INDEX IF NOT EXISTS idx_region_warehouses_warehouse ON region_warehouses(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_region_shipping_rates_region ON region_shipping_rates(region_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_inventory_sku ON warehouse_inventory(sku);
+CREATE INDEX IF NOT EXISTS idx_warehouse_inventory_warehouse ON warehouse_inventory(warehouse_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_inventory_logs_sku ON warehouse_inventory_logs(sku, created_at);
+CREATE INDEX IF NOT EXISTS idx_variant_prices_variant ON variant_prices(variant_id);
+CREATE INDEX IF NOT EXISTS idx_variant_prices_currency ON variant_prices(currency_id);
+CREATE INDEX IF NOT EXISTS idx_carts_region ON carts(region_id);
+CREATE INDEX IF NOT EXISTS idx_orders_region ON orders(region_id);
+CREATE INDEX IF NOT EXISTS idx_orders_warehouse ON orders(warehouse_id);
 `;
 
 export class MerchantDO extends DurableObject<MerchantEnv> {
   private sql: SqlStorage;
   private sessions: Map<WebSocket, { topics: Set<string> }> = new Map();
   private initialized = false;
+  private keysInitialized = false;
 
   constructor(ctx: DurableObjectState, env: MerchantEnv) {
     super(ctx, env);
     this.sql = ctx.storage.sql;
+  }
+
+  private async hashKey(key: string): Promise<string> {
+    const data = new TextEncoder().encode(key);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  private uuid(): string {
+    return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   private ensureInitialized(): void {
@@ -358,8 +527,48 @@ export class MerchantDO extends DurableObject<MerchantEnv> {
     this.initialized = true;
   }
 
+  private async initializeDefaultKeys(): Promise<void> {
+    if (this.keysInitialized) return;
+
+    const merchantSk = (this.env as any).MERCHANT_SK;
+    const merchantPk = (this.env as any).MERCHANT_PK;
+
+    if (merchantSk) {
+      const skHash = await this.hashKey(merchantSk);
+      try {
+        this.sql.exec(
+          `INSERT OR IGNORE INTO api_keys (id, key_hash, key_prefix, role, created_at) 
+           VALUES (?, ?, ?, 'admin', datetime('now'))`,
+          this.uuid(),
+          skHash,
+          'sk_' + merchantSk.substring(3, 8)
+        );
+      } catch (e) {
+        // Key already exists, ignore
+      }
+    }
+
+    if (merchantPk) {
+      const pkHash = await this.hashKey(merchantPk);
+      try {
+        this.sql.exec(
+          `INSERT OR IGNORE INTO api_keys (id, key_hash, key_prefix, role, created_at) 
+           VALUES (?, ?, ?, 'public', datetime('now'))`,
+          this.uuid(),
+          pkHash,
+          'pk_' + merchantPk.substring(3, 8)
+        );
+      } catch (e) {
+        // Key already exists, ignore
+      }
+    }
+
+    this.keysInitialized = true;
+  }
+
   async fetch(request: Request): Promise<Response> {
     this.ensureInitialized();
+    await this.initializeDefaultKeys();
 
     const url = new URL(request.url);
 

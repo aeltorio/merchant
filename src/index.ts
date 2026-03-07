@@ -14,6 +14,7 @@ import { discounts } from './routes/discounts';
 import { oauth } from './routes/oauth';
 import { ucp } from './routes/ucp';
 import { auth0Routes } from './routes/auth0';
+import { regions } from './routes/regions';
 import { rateLimitMiddleware } from './middleware/rate-limit';
 import { ApiError, type Env, type DOStub } from './types';
 import { MerchantDO } from './do';
@@ -53,7 +54,11 @@ app.onError((err, c) => {
     );
   }
 
-  return c.json({ error: { code: 'internal', message: 'Internal server error' } }, 500);
+  // Extract detailed error message for database and other errors
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  const message = `Internal server error${errorMessage ? ': ' + errorMessage : ''}`;
+
+  return c.json({ error: { code: 'internal', message } }, 500);
 });
 
 app.get('/', (c) => c.json({ name: 'merchant', version: '0.1.0', ok: true }));
@@ -68,6 +73,7 @@ app.route('/v1/webhooks', webhooks);
 app.route('/v1/webhooks', webhooksRoutes);
 app.route('/v1/images', images);
 app.route('/v1/discounts', discounts);
+app.route('/v1/regions', regions);
 app.route('/oauth', oauth);
 app.route('', oauth);
 app.route('', ucp);

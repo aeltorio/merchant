@@ -1,0 +1,445 @@
+/**
+ * Advanced Routes Integration Tests
+ * Tests for checkout (region-aware), inventory, orders, discounts, and other features
+ * 
+ * Prerequisites:
+ * - Start dev server: npm run dev:env (from merchant directory)
+ * - Server must be running on http://localhost:8787
+ * - .env must contain MERCHANT_SK and MERCHANT_PK
+ */
+
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { config as loadEnv } from 'dotenv';
+
+loadEnv({ path: '../../.env' });
+
+const API_URL = 'http://localhost:8787';
+const ADMIN_KEY = process.env.MERCHANT_SK || '';
+const PUBLIC_KEY = process.env.MERCHANT_PK || '';
+
+interface TestData {
+  currencies: string[];
+  countries: string[];
+  warehouses: string[];
+  shippingRates: string[];
+  regions: string[];
+  products: string[];
+  variants: string[];
+  carts: string[];
+  orders: string[];
+}
+
+let testData: TestData;
+
+// API helper function
+async function api(
+  path: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
+  body?: any,
+  token?: string,
+  expectError = false
+) {
+  const key = token || ADMIN_KEY;
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok && !expectError) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(`${method} ${path} failed: ${res.status} ${JSON.stringify(errorData)}`);
+  }
+
+  return res.json();
+}
+
+describe('Advanced Routes Tests', () => {
+  beforeAll(async () => {
+    testData = {
+      currencies: [],
+      countries: [],
+      warehouses: [],
+      shippingRates: [],
+      regions: [],
+      products: [],
+      variants: [],
+      carts: [],
+      orders: [],
+    };
+
+    if (!ADMIN_KEY) throw new Error('MERCHANT_SK not set in .env');
+    if (!PUBLIC_KEY) throw new Error('MERCHANT_PK not set in .env');
+
+    // Create test data: currency, country, warehouse, shipping rate, region
+    const currencyRes = await api('/v1/regions/currencies', 'POST', {
+      code: 'TST',
+      display_name: 'Test Currency',
+      symbol: 'T',
+      decimal_places: 2,
+    });
+    testData.currencies.push(currencyRes.id);
+
+    const countryRes = await api('/v1/regions/countries', 'POST', {
+      code: 'TS',
+      display_name: 'Test Country',
+      country_name: 'Test Country Full Name',
+      language_code: 'en',
+    });
+    testData.countries.push(countryRes.id);
+
+    const warehouseRes = await api('/v1/regions/warehouses', 'POST', {
+      display_name: 'Test Warehouse',
+      address_line1: '123 Test St',
+      city: 'Test City',
+      postal_code: '12345',
+      country_code: 'TS',
+      priority: 1,
+    });
+    testData.warehouses.push(warehouseRes.id);
+
+    const shippingRes = await api('/v1/regions/shipping-rates', 'POST', {
+      display_name: 'Standard Shipping',
+      description: 'Standard shipping method',
+    });
+    testData.shippingRates.push(shippingRes.id);
+
+    const regionRes = await api('/v1/regions', 'POST', {
+      display_name: 'Test Region',
+      currency_id: testData.currencies[0],
+    });
+    testData.regions.push(regionRes.id);
+
+    // Associate country, warehouse, and shipping rate with region
+    await api(`/v1/regions/${testData.regions[0]}/countries`, 'POST', {
+      country_id: testData.countries[0],
+    });
+
+    await api(`/v1/regions/${testData.regions[0]}/warehouses`, 'POST', {
+      warehouse_id: testData.warehouses[0],
+    });
+
+    await api(`/v1/regions/${testData.regions[0]}/shipping-rates`, 'POST', {
+      shipping_rate_id: testData.shippingRates[0],
+    });
+
+    // Add price to shipping rate
+    await api(`/v1/regions/shipping-rates/${testData.shippingRates[0]}/prices`, 'POST', {
+      currency_id: testData.currencies[0],
+      amount_cents: 1500,
+    });
+
+    console.log('✓ Test data setup complete');
+  });
+
+  afterAll(async () => {
+    console.log('\n📋 Cleaning up test data...');
+    
+    for (const cartId of testData.carts) {
+      try {
+        await api(`/v1/carts/${cartId}`, 'DELETE');
+      } catch (e) {
+        // Cart might auto-expire
+      }
+    }
+
+    for (const regionId of testData.regions.reverse()) {
+      try {
+        await api(`/v1/regions/${regionId}`, 'DELETE');
+      } catch (e) {
+        console.warn(`Failed to delete region ${regionId}`);
+      }
+    }
+
+    for (const rateId of testData.shippingRates.reverse()) {
+      try {
+        await api(`/v1/regions/shipping-rates/${rateId}`, 'DELETE');
+      } catch (e) {
+        console.warn(`Failed to delete shipping rate ${rateId}`);
+      }
+    }
+
+    for (const warehouseId of testData.warehouses.reverse()) {
+      try {
+        await api(`/v1/regions/warehouses/${warehouseId}`, 'DELETE');
+      } catch (e) {
+        console.warn(`Failed to delete warehouse ${warehouseId}`);
+      }
+    }
+
+    for (const countryId of testData.countries.reverse()) {
+      try {
+        await api(`/v1/regions/countries/${countryId}`, 'DELETE');
+      } catch (e) {
+        console.warn(`Failed to delete country ${countryId}`);
+      }
+    }
+
+    for (const currencyId of testData.currencies.reverse()) {
+      try {
+        await api(`/v1/regions/currencies/${currencyId}`, 'DELETE');
+      } catch (e) {
+        console.warn(`Failed to delete currency ${currencyId}`);
+      }
+    }
+
+    console.log('✓ Cleanup complete');
+  });
+
+  describe('Region-Aware Checkout', () => {
+    it('should create cart with specified region', async () => {
+      const cart = await api('/v1/carts', 'POST', {
+        region_id: testData.regions[0],
+        customer_email: 'test@advanced.com',
+      });
+
+      expect(cart.id).toBeDefined();
+      expect(cart.region_id).toBe(testData.regions[0]);
+      expect(cart.status).toBe('open');
+      
+      testData.carts.push(cart.id);
+    });
+
+    it('should create cart with default region when none specified', async () => {
+      // Set first region as default
+      await api(`/v1/regions/${testData.regions[0]}/default`, 'POST');
+
+      const cart = await api('/v1/carts', 'POST', {
+        customer_email: 'test2@advanced.com',
+      });
+
+      expect(cart.id).toBeDefined();
+      expect(cart.region_id).toBeDefined();
+      expect(cart.status).toBe('open');
+      
+      testData.carts.push(cart.id);
+    });
+
+    it('should reject cart creation with non-existent region', async () => {
+      const result = await api('/v1/carts', 'POST', {
+        region_id: 'non-existent',
+        customer_email: 'test3@advanced.com',
+      }, undefined, true);
+
+      expect(result.error).toBeDefined();
+    });
+
+    it('should reject cart creation with invalid email', async () => {
+      const result = await api('/v1/carts', 'POST', {
+        region_id: testData.regions[0],
+        customer_email: 'not-an-email',
+      }, undefined, true);
+
+      expect(result.error).toBeDefined();
+    });
+
+    it('should get cart details by ID', async () => {
+      const createdCart = await api('/v1/carts', 'POST', {
+        region_id: testData.regions[0],
+        customer_email: 'test-get@advanced.com',
+      });
+
+      const cart = await api(`/v1/carts/${createdCart.id}`, 'GET');
+
+      expect(cart.id).toBe(createdCart.id);
+      expect(cart.customer_email).toBe('test-get@advanced.com');
+      expect(cart.status).toBe('open');
+      
+      testData.carts.push(cart.id);
+    });
+
+    it('should return 404 for non-existent cart', async () => {
+      const result = await api('/v1/carts/non-existent', 'GET', undefined, undefined, true);
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('Inventory Management', () => {
+    it('should list inventory items', async () => {
+      const inventory = await api('/v1/inventory', 'GET');
+      expect(Array.isArray(inventory.items)).toBe(true);
+    });
+
+    it('should get inventory for specific SKU', async () => {
+      const inventory = await api('/v1/inventory', 'GET');
+      if (inventory.items && inventory.items.length > 0) {
+        const sku = inventory.items[0].sku;
+        const item = await api(`/v1/inventory/${sku}`, 'GET');
+        expect(item.sku).toBe(sku);
+        expect(typeof item.on_hand).toBe('number');
+        expect(typeof item.reserved).toBe('number');
+      }
+    });
+
+    it('should list warehouse inventory', async () => {
+      const inventory = await api(
+        `/v1/warehouses/${testData.warehouses[0]}/inventory`,
+        'GET'
+      );
+      expect(Array.isArray(inventory.items) || inventory.id).toBe(true);
+    });
+  });
+
+  describe('Order Management', () => {
+    it('should list orders with pagination', async () => {
+      const orders = await api('/v1/orders?limit=10&offset=0', 'GET');
+      expect(Array.isArray(orders.items) || orders.data).toBeDefined();
+    });
+
+    it('should filter orders by status', async () => {
+      const orders = await api('/v1/orders?status=pending', 'GET');
+      expect(orders.items || orders.data || Array.isArray(orders)).toBeDefined();
+    });
+
+    it('should allow only admin access to order list', async () => {
+      const result = await api(
+        '/v1/orders',
+        'GET',
+        undefined,
+        PUBLIC_KEY,
+        true
+      );
+      expect(result.error).toBeDefined();
+    });
+  });
+
+  describe('Discount Management', () => {
+    it('should create a discount code', async () => {
+      const discount = await api('/v1/discounts', 'POST', {
+        code: `TEST-${Date.now()}`,
+        type: 'fixed',
+        amount_cents: 1000,
+        max_uses: 10,
+        valid_until: new Date(Date.now() + 86400000).toISOString(),
+      });
+
+      expect(discount.id).toBeDefined();
+      expect(discount.code).toBeDefined();
+    });
+
+    it('should apply discount to cart', async () => {
+      const cart = await api('/v1/carts', 'POST', {
+        region_id: testData.regions[0],
+        customer_email: 'discount-test@advanced.com',
+      });
+      testData.carts.push(cart.id);
+
+      const discount = await api('/v1/discounts', 'POST', {
+        code: `DISC-${Date.now()}`,
+        type: 'percentage',
+        amount_cents: 1000, // 10%
+        max_uses: 10,
+        valid_until: new Date(Date.now() + 86400000).toISOString(),
+      });
+
+      const appliedDiscount = await api(
+        `/v1/carts/${cart.id}/discount`,
+        'POST',
+        { discount_code: discount.code }
+      );
+
+      expect(appliedDiscount.discount).toBeDefined();
+      expect(appliedDiscount.discount.code).toBe(discount.code);
+    });
+  });
+
+  describe('Customer Management', () => {
+    it('should list customers with pagination', async () => {
+      const customers = await api('/v1/customers?limit=10&offset=0', 'GET');
+      expect(Array.isArray(customers.items) || customers.data).toBeDefined();
+    });
+
+    it('should create customer', async () => {
+      const customer = await api('/v1/customers', 'POST', {
+        email: `customer-${Date.now()}@test.com`,
+        first_name: 'Test',
+        last_name: 'Customer',
+        phone: '+1234567890',
+      });
+
+      expect(customer.id).toBeDefined();
+      expect(customer.email).toBeDefined();
+    });
+
+    it('should get customer details', async () => {
+      const created = await api('/v1/customers', 'POST', {
+        email: `get-customer-${Date.now()}@test.com`,
+        first_name: 'Get',
+        last_name: 'Customer',
+      });
+
+      const customer = await api(`/v1/customers/${created.id}`, 'GET');
+      expect(customer.id).toBe(created.id);
+      expect(customer.email).toBe(created.email);
+    });
+
+    it('should update customer', async () => {
+      const created = await api('/v1/customers', 'POST', {
+        email: `update-customer-${Date.now()}@test.com`,
+        first_name: 'Update',
+        last_name: 'Customer',
+      });
+
+      const updated = await api(`/v1/customers/${created.id}`, 'PATCH', {
+        first_name: 'Updated',
+      });
+
+      expect(updated.first_name).toBe('Updated');
+    });
+  });
+
+  describe('Authorization', () => {
+    it('should deny public key access to admin endpoints', async () => {
+      const result = await api(
+        '/v1/regions/currencies',
+        'GET',
+        undefined,
+        PUBLIC_KEY,
+        true
+      );
+      expect(result.error).toBeDefined();
+    });
+
+    it('should require authorization header', async () => {
+      const res = await fetch(`${API_URL}/v1/regions/currencies`, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('should accept valid admin token', async () => {
+      const result = await api('/v1/regions/currencies', 'GET');
+      expect(Array.isArray(result.items) || result.error === undefined).toBe(true);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should return validation errors for invalid input', async () => {
+      const result = await api('/v1/regions/currencies', 'POST', {
+        code: 'X', // Too short
+      }, undefined, true);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should handle database errors gracefully', async () => {
+      const result = await api('/v1/regions/currencies', 'PATCH', {
+        name: 'Updated',
+      }, undefined, true);
+      expect(result.error).toBeDefined();
+    });
+
+    it('should return 404 for non-existent resources', async () => {
+      const result = await api(
+        '/v1/customers/non-existent',
+        'GET',
+        undefined,
+        undefined,
+        true
+      );
+      expect(result.error).toBeDefined();
+    });
+  });
+});

@@ -48,10 +48,22 @@ app.openapi(getCart, async (c) => {
 
   const items = await db.query<any>(`SELECT * FROM cart_items WHERE cart_id = ?`, [cartId]);
 
+  // Get shipping info
+  let shippingInfo = { rate_id: null as string | null, rate_name: null as string | null, amount_cents: 0 };
+  if (cart.shipping_rate_id) {
+    const [rate] = await db.query<any>(`SELECT * FROM shipping_rates WHERE id = ?`, [cart.shipping_rate_id]);
+    if (rate) {
+      shippingInfo.rate_id = rate.id;
+      shippingInfo.rate_name = rate.display_name;
+      shippingInfo.amount_cents = cart.shipping_cents || 0;
+    }
+  }
+
   return c.json({
     id: cart.id,
     status: cart.status,
     currency: cart.currency,
+    region_id: cart.region_id,
     customer_email: cart.customer_email,
     items: items.map((i) => ({
       sku: i.sku,
@@ -59,6 +71,7 @@ app.openapi(getCart, async (c) => {
       qty: i.qty,
       unit_price_cents: i.unit_price_cents,
     })),
+    shipping: shippingInfo,
     expires_at: cart.expires_at,
     stripe_checkout_session_id: cart.stripe_checkout_session_id,
   }, 200);
@@ -77,7 +90,7 @@ const createCart = createRoute({
 });
 
 app.openapi(createCart, async (c) => {
-  const { customer_email } = c.req.valid('json');
+  const { customer_email, region_id } = c.req.valid('json');
 
   if (!isValidEmail(customer_email)) {
     throw ApiError.invalidRequest('A valid customer_email is required');
@@ -87,19 +100,50 @@ app.openapi(createCart, async (c) => {
   const id = uuid();
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
-  await db.run(`INSERT INTO carts (id, customer_email, expires_at) VALUES (?, ?, ?)`, [
-    id,
-    customer_email,
-    expiresAt,
-  ]);
+  let currency = 'USD';
+  let resolvedRegionId = region_id || null;
+
+  // If region_id provided, validate and get currency
+  if (region_id) {
+    const [region] = await db.query<any>(
+      `SELECT r.*, c.code as currency_code FROM regions r
+       JOIN currencies c ON r.currency_id = c.id
+       WHERE r.id = ? AND r.status = 'active'`,
+      [region_id]
+    );
+    if (!region) throw ApiError.notFound('Region not found or inactive');
+    currency = region.currency_code;
+  } else {
+    // Try to get default region
+    const [defaultRegion] = await db.query<any>(
+      `SELECT r.*, c.code as currency_code FROM regions r
+       JOIN currencies c ON r.currency_id = c.id
+       WHERE r.is_default = 1 AND r.status = 'active'`
+    );
+    if (defaultRegion) {
+      resolvedRegionId = defaultRegion.id;
+      currency = defaultRegion.currency_code;
+    }
+  }
+
+  await db.run(
+    `INSERT INTO carts (id, customer_email, currency, region_id, expires_at) VALUES (?, ?, ?, ?, ?)`,
+    [id, customer_email, currency, resolvedRegionId, expiresAt]
+  );
 
   return c.json({
     id,
     status: 'open' as const,
-    currency: 'USD',
+    currency,
+    region_id: resolvedRegionId,
     customer_email,
     items: [],
     discount: null,
+    shipping: {
+      rate_id: null,
+      rate_name: null,
+      amount_cents: 0,
+    },
     totals: {
       subtotal_cents: 0,
       discount_cents: 0,

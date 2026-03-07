@@ -159,9 +159,15 @@ export const CartResponse = z.object({
   id: z.string().uuid(),
   status: z.enum(['open', 'checked_out', 'expired']),
   currency: z.string().openapi({ example: 'USD' }),
+  region_id: z.string().uuid().nullable().optional().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
   customer_email: z.string().email(),
   items: z.array(CartItem),
   discount: CartDiscount.optional(),
+  shipping: z.object({
+    rate_id: z.string().uuid().nullable(),
+    rate_name: z.string().nullable(),
+    amount_cents: z.number().int(),
+  }).optional(),
   totals: CartTotals.optional(),
   expires_at: z.string().datetime(),
   stripe_checkout_session_id: z.string().nullable().optional(),
@@ -169,6 +175,7 @@ export const CartResponse = z.object({
 
 export const CreateCartBody = z.object({
   customer_email: z.string().email().openapi({ example: 'customer@example.com' }),
+  region_id: z.string().uuid().optional().openapi({ example: '550e8400-e29b-41d4-a716-446655440000', description: 'Optional region for this cart' }),
 }).openapi('CreateCart');
 
 export const AddCartItemsBody = z.object({
@@ -553,6 +560,240 @@ export const ImageUploadResponse = z.object({
 }).openapi('ImageUpload');
 
 // ============================================================
+// MULTI-REGION SCHEMAS
+// ============================================================
+
+// Currencies
+export const CurrencyResponse = z.object({
+  id: z.string().uuid(),
+  code: z.string().length(3).toUpperCase().openapi({ example: 'USD' }),
+  display_name: z.string().openapi({ example: 'US Dollar' }),
+  symbol: z.string().openapi({ example: '$' }),
+  decimal_places: z.number().int().min(0).max(8).openapi({ example: 2 }),
+  status: z.enum(['active', 'inactive']),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+}).openapi('Currency');
+
+export const CreateCurrencyBody = z.object({
+  code: z.string().length(3).toUpperCase().openapi({ example: 'USD' }),
+  display_name: z.string().min(1).openapi({ example: 'US Dollar' }),
+  symbol: z.string().min(1).openapi({ example: '$' }),
+  decimal_places: z.number().int().min(0).max(8).optional().default(2).openapi({ example: 2 }),
+}).openapi('CreateCurrency');
+
+export const UpdateCurrencyBody = z.object({
+  display_name: z.string().min(1).optional(),
+  symbol: z.string().min(1).optional(),
+  decimal_places: z.number().int().min(0).max(8).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).openapi('UpdateCurrency');
+
+export const CurrencyListResponse = z.object({
+  items: z.array(CurrencyResponse),
+  pagination: PaginationResponse,
+}).openapi('CurrencyList');
+
+// Countries
+export const CountryResponse = z.object({
+  id: z.string().uuid(),
+  code: z.string().length(2).toUpperCase().openapi({ example: 'US' }),
+  display_name: z.string().openapi({ example: 'United States' }),
+  country_name: z.string().openapi({ example: 'United States of America' }),
+  language_code: z.string().openapi({ example: 'en' }),
+  status: z.enum(['active', 'inactive']),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+}).openapi('Country');
+
+export const CreateCountryBody = z.object({
+  code: z.string().length(2).toUpperCase().openapi({ example: 'US' }),
+  display_name: z.string().min(1).openapi({ example: 'United States' }),
+  country_name: z.string().min(1).openapi({ example: 'United States of America' }),
+  language_code: z.string().min(2).optional().default('en').openapi({ example: 'en' }),
+}).openapi('CreateCountry');
+
+export const UpdateCountryBody = z.object({
+  display_name: z.string().min(1).optional(),
+  country_name: z.string().min(1).optional(),
+  language_code: z.string().min(2).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).openapi('UpdateCountry');
+
+export const CountryListResponse = z.object({
+  items: z.array(CountryResponse),
+  pagination: PaginationResponse,
+}).openapi('CountryList');
+
+// Warehouses
+export const WarehouseResponse = z.object({
+  id: z.string().uuid(),
+  display_name: z.string().openapi({ example: 'Main Warehouse' }),
+  address_line1: z.string().openapi({ example: '123 Main St' }),
+  address_line2: z.string().nullable().openapi({ example: 'Building A' }),
+  city: z.string().openapi({ example: 'New York' }),
+  state: z.string().nullable().openapi({ example: 'NY' }),
+  postal_code: z.string().openapi({ example: '10001' }),
+  country_code: z.string().openapi({ example: 'US' }),
+  priority: z.number().int().openapi({ example: 1 }),
+  status: z.enum(['active', 'inactive']),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+}).openapi('Warehouse');
+
+export const CreateWarehouseBody = z.object({
+  display_name: z.string().min(1).openapi({ example: 'Main Warehouse' }),
+  address_line1: z.string().min(1).openapi({ example: '123 Main St' }),
+  address_line2: z.string().optional().openapi({ example: 'Building A' }),
+  city: z.string().min(1).openapi({ example: 'New York' }),
+  state: z.string().optional().openapi({ example: 'NY' }),
+  postal_code: z.string().min(1).openapi({ example: '10001' }),
+  country_code: z.string().length(2).toUpperCase().openapi({ example: 'US' }),
+  priority: z.number().int().optional().default(0).openapi({ example: 1 }),
+}).openapi('CreateWarehouse');
+
+export const UpdateWarehouseBody = z.object({
+  display_name: z.string().min(1).optional(),
+  address_line1: z.string().min(1).optional(),
+  address_line2: z.string().nullable().optional(),
+  city: z.string().min(1).optional(),
+  state: z.string().nullable().optional(),
+  postal_code: z.string().min(1).optional(),
+  country_code: z.string().length(2).toUpperCase().optional(),
+  priority: z.number().int().optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).openapi('UpdateWarehouse');
+
+export const WarehouseListResponse = z.object({
+  items: z.array(WarehouseResponse),
+  pagination: PaginationResponse,
+}).openapi('WarehouseList');
+
+// Shipping Rates
+export const ShippingRateResponse = z.object({
+  id: z.string().uuid(),
+  display_name: z.string().openapi({ example: 'Standard Shipping' }),
+  description: z.string().nullable().openapi({ example: '5-7 business days' }),
+  max_weight_g: z.number().int().nullable().openapi({ example: 5000 }),
+  min_delivery_days: z.number().int().nullable().openapi({ example: 5 }),
+  max_delivery_days: z.number().int().nullable().openapi({ example: 7 }),
+  status: z.enum(['active', 'inactive']),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+}).openapi('ShippingRate');
+
+export const CreateShippingRateBody = z.object({
+  display_name: z.string().min(1).openapi({ example: 'Standard Shipping' }),
+  description: z.string().optional().openapi({ example: '5-7 business days' }),
+  max_weight_g: z.number().int().optional().openapi({ example: 5000 }),
+  min_delivery_days: z.number().int().optional().openapi({ example: 5 }),
+  max_delivery_days: z.number().int().optional().openapi({ example: 7 }),
+}).openapi('CreateShippingRate');
+
+export const UpdateShippingRateBody = z.object({
+  display_name: z.string().min(1).optional(),
+  description: z.string().nullable().optional(),
+  max_weight_g: z.number().int().nullable().optional(),
+  min_delivery_days: z.number().int().nullable().optional(),
+  max_delivery_days: z.number().int().nullable().optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).openapi('UpdateShippingRate');
+
+export const ShippingRateListResponse = z.object({
+  items: z.array(ShippingRateResponse),
+  pagination: PaginationResponse,
+}).openapi('ShippingRateList');
+
+// Regions
+export const RegionResponse = z.object({
+  id: z.string().uuid(),
+  display_name: z.string().openapi({ example: 'North America' }),
+  currency_id: z.string().uuid(),
+  currency_code: z.string().optional().openapi({ example: 'USD' }),
+  is_default: z.boolean(),
+  status: z.enum(['active', 'inactive']),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+}).openapi('Region');
+
+export const CreateRegionBody = z.object({
+  display_name: z.string().min(1).openapi({ example: 'North America' }),
+  currency_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+  is_default: z.boolean().optional().default(false).openapi({ example: false }),
+  country_ids: z.array(z.string().uuid()).optional().default([]).openapi({ example: [] }),
+  warehouse_ids: z.array(z.string().uuid()).optional().default([]).openapi({ example: [] }),
+  shipping_rate_ids: z.array(z.string().uuid()).optional().default([]).openapi({ example: [] }),
+}).openapi('CreateRegion');
+
+export const UpdateRegionBody = z.object({
+  display_name: z.string().min(1).optional(),
+  currency_id: z.string().uuid().optional(),
+  is_default: z.boolean().optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).openapi('UpdateRegion');
+
+export const SetCartShippingBody = z.object({
+  shipping_rate_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+}).openapi('SetCartShipping');
+
+// Region Associations
+export const RegionCountryAssociationBody = z.object({
+  country_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+}).openapi('RegionCountryAssociation');
+
+export const RegionWarehouseAssociationBody = z.object({
+  warehouse_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+}).openapi('RegionWarehouseAssociation');
+
+export const RegionShippingRateAssociationBody = z.object({
+  shipping_rate_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+}).openapi('RegionShippingRateAssociation');
+
+// Shipping Rate Pricing
+export const ShippingRatePriceBody = z.object({
+  currency_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+  amount_cents: z.number().int().positive().openapi({ example: 999 }),
+}).openapi('ShippingRatePrice');
+
+export const RegionListResponse = z.object({
+  items: z.array(RegionResponse),
+  pagination: PaginationResponse,
+}).openapi('RegionList');
+
+// Warehouse Inventory
+export const WarehouseInventoryItem = z.object({
+  sku: z.string().openapi({ example: 'TEE-BLK-M' }),
+  warehouse_id: z.string().uuid(),
+  warehouse_name: z.string().nullable().openapi({ example: 'Main Warehouse' }),
+  on_hand: z.number().int().openapi({ example: 100 }),
+  reserved: z.number().int().openapi({ example: 5 }),
+  available: z.number().int().openapi({ example: 95 }),
+  variant_title: z.string().nullable().openapi({ example: 'Black / Medium' }),
+  product_title: z.string().nullable().openapi({ example: 'Classic T-Shirt' }),
+}).openapi('WarehouseInventoryItem');
+
+export const WarehouseInventoryListResponse = z.object({
+  items: z.array(WarehouseInventoryItem),
+  pagination: PaginationResponse,
+}).openapi('WarehouseInventoryList');
+
+export const WarehouseInventoryQuery = PaginationQuery.extend({
+  sku: z.string().optional().openapi({ param: { name: 'sku', in: 'query' }, example: 'TEE-BLK-M' }),
+  warehouse_id: z.string().uuid().optional().openapi({ param: { name: 'warehouse_id', in: 'query' } }),
+  low_stock: z.string().optional().openapi({ param: { name: 'low_stock', in: 'query' } }),
+});
+
+export const RegionalInventoryQuery = z.object({
+  region_id: z.string().uuid().openapi({ param: { name: 'region_id', in: 'query' }, example: '550e8400-e29b-41d4-a716-446655440000' }),
+});
+
+export const AdjustWarehouseInventoryBody = z.object({
+  warehouse_id: z.string().uuid().openapi({ example: '550e8400-e29b-41d4-a716-446655440000' }),
+  delta: z.number().int().openapi({ example: 50, description: 'Positive to add, negative to subtract' }),
+  reason: z.enum(['restock', 'correction', 'damaged', 'return', 'sale', 'release']).openapi({ example: 'restock' }),
+}).openapi('AdjustWarehouseInventory');
+
+// ============================================================
 // TYPE EXPORTS
 // ============================================================
 
@@ -564,3 +805,9 @@ export type Discount = z.infer<typeof DiscountResponse>;
 export type Webhook = z.infer<typeof WebhookResponse>;
 export type InventoryItemType = z.infer<typeof InventoryItem>;
 export type CartType = z.infer<typeof CartResponse>;
+export type CurrencyType = z.infer<typeof CurrencyResponse>;
+export type CountryType = z.infer<typeof CountryResponse>;
+export type WarehouseType = z.infer<typeof WarehouseResponse>;
+export type ShippingRateType = z.infer<typeof ShippingRateResponse>;
+export type RegionType = z.infer<typeof RegionResponse>;
+export type WarehouseInventoryType = z.infer<typeof WarehouseInventoryItem>;
