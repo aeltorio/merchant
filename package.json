@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:env": "bash -c 'cp ../../.env .dev.vars && wrangler dev'",
+    "preview:env": "npm run dev:env",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute DB --file=schema-d1.sql --local",
     "db:seed": "npx tsx scripts/seed.ts",
