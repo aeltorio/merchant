@@ -29,15 +29,15 @@ function generateApiKey(prefix: 'pk' | 'sk'): string {
 async function init() {
   const isRemote = process.argv.includes('--remote');
   const baseUrl = isRemote 
-    ? process.env.MERCHANT_URL || 'https://merchant.your-domain.workers.dev'
+    ? process.env.API_BASE_URL || 'https://merchant.your-domain.workers.dev'
     : 'http://localhost:8787';
   const envLabel = isRemote ? 'PRODUCTION' : 'LOCAL';
   
   console.log(`🚀 Initializing merchant (${envLabel})...\n`);
 
-  if (isRemote && !process.env.MERCHANT_URL) {
-    console.log('⚠️  Set MERCHANT_URL env var for remote init, e.g.:');
-    console.log('   MERCHANT_URL=https://merchant.example.com npx tsx scripts/init.ts --remote\n');
+  if (isRemote && !process.env.API_BASE_URL) {
+    console.log('⚠️  Set API_BASE_URL env var for remote init, e.g.:');
+    console.log('   API_BASE_URL=https://merchant.example.com npx tsx scripts/init.ts --remote\n');
   }
 
   // if the keys are provided via environment we reuse them instead of generating new ones
