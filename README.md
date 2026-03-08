@@ -144,19 +144,81 @@ PATCH /v1/products/{id}/variants/{variantId}
 DELETE /v1/products/{id}/variants/{variantId}
 ```
 
+> **Multi-region overview:**
+> The backend supports multiple geographic regions, each with its own
+> currency, list of countries, shipping rates, and one or more warehouses.
+> Regions drive pricing, tax rules and order fulfillment – when a customer
+> checks out, the system selects a warehouse from the region that contains
+> the shipping country and deducts stock accordingly. Warehouses themselves
+> are linked to regions and hold the actual inventory levels used by
+> `/v1/inventory/warehouse` and the `warehouse-adjust` endpoint.
+>
+### Regions (admin)
+
+```bash
+# List regions (with pagination)
+GET /v1/regions?limit=20&cursor=...
+
+# Create a region
+POST /v1/regions
+{"name": "Europe", "default_currency_id": "..."}
+
+# Get / update / delete a region
+GET /v1/regions/{id}
+PATCH /v1/regions/{id}
+DELETE /v1/regions/{id}
+
+# Currencies
+GET /v1/regions/currencies?limit=20&cursor=...
+POST /v1/regions/currencies
+{"code":"USD","display_name":"US Dollar","symbol":"$","decimal_places":2}
+PATCH /v1/regions/currencies/{id}
+DELETE /v1/regions/currencies/{id}
+
+# Countries (with batch helpers)
+GET /v1/regions/countries?limit=100&cursor=...
+GET /v1/regions/countries/batch            # return all countries in one request
+POST /v1/regions/countries
+{"code":"FR","display_name":"France","country_name":"France","language_code":"fr"}
+POST /v1/regions/countries/batch           # create multiple countries at once
+PATCH /v1/regions/countries/{id}
+DELETE /v1/regions/countries/{id}
+
+# Warehouses
+GET /v1/regions/warehouses?limit=20&cursor=...
+POST /v1/regions/warehouses
+{"display_name":"Main Warehouse","address_line1":"123 Main St","country_code":"US","priority":1}
+PATCH /v1/regions/warehouses/{id}
+DELETE /v1/regions/warehouses/{id}
+
+# Shipping rates
+GET /v1/regions/shipping-rates?limit=20&cursor=...
+POST /v1/regions/shipping-rates
+{"name":"Standard","currency_code":"USD","amount_cents":500}
+PATCH /v1/regions/shipping-rates/{id}
+DELETE /v1/regions/shipping-rates/{id}
+```
+
 ### Inventory (admin)
 
 ```bash
-# List inventory (with pagination)
-GET /v1/inventory?limit=100&cursor=...&low_stock=true
+# List inventory (with pagination, optional SKU or warehouse filter)
+GET /v1/inventory?limit=100&cursor=...&sku=TEE-BLK-M&warehouse_id=<uuid>&low_stock=true
 
 # Get single SKU
 GET /v1/inventory?sku=TEE-BLK-M
 
-# Adjust inventory
+# List inventory per warehouse (detailed breakdown)
+GET /v1/inventory/warehouse?limit=100&cursor=...&sku=TEE-BLK-M&warehouse_id=<uuid>&low_stock=true
+
+# Adjust inventory (overall)
 POST /v1/inventory/{sku}/adjust
 {"delta": 100, "reason": "restock"}
 # reason: restock | correction | damaged | return
+
+# Adjust inventory in a specific warehouse
+POST /v1/inventory/{sku}/warehouse-adjust
+{"warehouse_id":"<uuid>","delta": 100, "reason": "restock"}
 ```
 
 **Query params:**

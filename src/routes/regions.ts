@@ -1,4 +1,5 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
+import { z } from 'zod';
 import {
   IdParam,
   PaginationQuery,
@@ -377,6 +378,119 @@ app.openapi(createCountry, async (c) => {
   }, 201);
 });
 
+// ============================================================
+// BATCH COUNTRIES ROUTES (must be before parameterized routes)
+// ============================================================
+
+const listCountriesBatch = createRoute({
+  method: 'get',
+  path: '/countries/batch',
+  tags: ['Regions - Countries'],
+  summary: 'List all countries without pagination',
+  description: 'Get all countries as a simple array (for bulk operations)',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  responses: {
+    200: {
+      content: { 'application/json': { schema: CountryListResponse } },
+      description: 'List of all countries',
+    },
+  },
+});
+
+app.openapi(listCountriesBatch, async (c) => {
+  const db = getDb(c.var.db);
+
+  const items = await db.query<any>('SELECT * FROM countries ORDER BY code ASC');
+
+  return c.json({
+    items: items.map((item) => ({
+      id: item.id,
+      code: item.code,
+      display_name: item.display_name,
+      country_name: item.country_name,
+      language_code: item.language_code,
+      status: item.status,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+    })),
+    pagination: {
+      has_more: false,
+      next_cursor: null,
+    },
+  }, 200);
+});
+
+const createCountriesBatch = createRoute({
+  method: 'post',
+  path: '/countries/batch',
+  tags: ['Regions - Countries'],
+  summary: 'Create multiple countries in one request',
+  description: 'Batch create countries for better performance',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            countries: z.array(CreateCountryBody),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    201: {
+      content: { 'application/json': { schema: CountryListResponse } },
+      description: 'Created countries',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'Invalid request',
+    },
+  },
+});
+
+app.openapi(createCountriesBatch, async (c) => {
+  const { countries } = c.req.valid('json');
+  const db = getDb(c.var.db);
+
+  const timestamp = now();
+  const created: any[] = [];
+
+  for (const country of countries) {
+    const id = uuid();
+    const { code, display_name, country_name, language_code } = country;
+
+    await db.run(
+      `INSERT INTO countries (id, code, display_name, country_name, language_code, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
+      [id, code, display_name, country_name, language_code, timestamp, timestamp]
+    );
+
+    const [row] = await db.query<any>('SELECT * FROM countries WHERE id = ?', [id]);
+    created.push({
+      id: row.id,
+      code: row.code,
+      display_name: row.display_name,
+      country_name: row.country_name,
+      language_code: row.language_code,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    });
+  }
+
+  return c.json({ 
+    items: created,
+    pagination: {
+      has_more: false,
+      next_cursor: null,
+    },
+  }, 201);
+});
+
 const getCountry = createRoute({
   method: 'get',
   path: '/countries/{id}',
@@ -403,7 +517,6 @@ app.openapi(getCountry, async (c) => {
 
   const [country] = await db.query<any>('SELECT * FROM countries WHERE id = ?', [id]);
   if (!country) throw ApiError.notFound('Country not found');
-
   return c.json({
     id: country.id,
     code: country.code,

@@ -102,9 +102,21 @@ export const InventoryItem = z.object({
   available: z.number().int().openapi({ example: 95 }),
 }).openapi('InventoryItem');
 
+export const WarehouseInventoryDetail = z.object({
+  warehouse_id: z.string().uuid().openapi({ example: 'warehouse-123' }),
+  warehouse_name: z.string().openapi({ example: 'France Distribution Center' }),
+  quantity: z.number().int().openapi({ example: 50 }),
+}).openapi('WarehouseInventoryDetail');
+
 export const InventoryItemWithDetails = InventoryItem.extend({
   variant_title: z.string().nullable().openapi({ example: 'Black / Medium' }),
   product_title: z.string().nullable().openapi({ example: 'Classic T-Shirt' }),
+  warehouses: z.array(WarehouseInventoryDetail).optional().openapi({
+    example: [
+      { warehouse_id: '123', warehouse_name: 'FR', quantity: 50 },
+      { warehouse_id: '456', warehouse_name: 'IT', quantity: 50 },
+    ],
+  }),
 }).openapi('InventoryItemWithDetails');
 
 export const InventoryListResponse = z.object({
@@ -304,6 +316,7 @@ export const CreateTestOrderBody = z.object({
     sku: z.string(),
     qty: z.number().int().positive(),
   })).min(1),
+  region_id: z.string().uuid().optional().openapi({ description: 'Optional region for this order. If not specified, uses default region.' }),
   discount_code: z.string().optional(),
 }).openapi('CreateTestOrder');
 

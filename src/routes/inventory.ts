@@ -51,25 +51,36 @@ app.openapi(listInventory, async (c) => {
   const db = getDb(c.var.db);
 
   if (sku) {
-    const [level] = await db.query<any>(
-      `SELECT i.*, v.title as variant_title, p.title as product_title
-       FROM inventory i
-       LEFT JOIN variants v ON i.sku = v.sku
+    // Get inventory for a specific SKU across all warehouses
+    const levels = await db.query<any>(
+      `SELECT wi.*, w.display_name as warehouse_name, v.title as variant_title, p.title as product_title
+       FROM warehouse_inventory wi
+       LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+       LEFT JOIN variants v ON wi.sku = v.sku
        LEFT JOIN products p ON v.product_id = p.id
-       WHERE i.sku = ?`,
+       WHERE wi.sku = ?
+       ORDER BY w.priority ASC`,
       [sku]
     );
 
-    if (!level) throw ApiError.notFound('SKU not found');
+    if (levels.length === 0) throw ApiError.notFound('SKU not found');
+
+    const totalOnHand = levels.reduce((sum, l) => sum + (l.on_hand || 0), 0);
+    const totalReserved = levels.reduce((sum, l) => sum + (l.reserved || 0), 0);
 
     return c.json({
       items: [{
-        sku: level.sku,
-        on_hand: level.on_hand,
-        reserved: level.reserved,
-        available: level.on_hand - level.reserved,
-        variant_title: level.variant_title,
-        product_title: level.product_title,
+        sku: sku,
+        on_hand: totalOnHand,
+        reserved: totalReserved,
+        available: totalOnHand - totalReserved,
+        variant_title: levels[0]?.variant_title,
+        product_title: levels[0]?.product_title,
+        warehouses: levels.map(l => ({
+          warehouse_id: l.warehouse_id,
+          warehouse_name: l.warehouse_name,
+          quantity: l.on_hand,
+        })),
       }],
       pagination: { has_more: false, next_cursor: null },
     }, 200);
@@ -78,26 +89,34 @@ app.openapi(listInventory, async (c) => {
   const limit = Math.min(parseInt(limitStr || '100'), 500);
   const lowStock = low_stock === 'true';
 
-  let query = `SELECT i.*, v.title as variant_title, p.title as product_title
-     FROM inventory i
-     LEFT JOIN variants v ON i.sku = v.sku
-     LEFT JOIN products p ON v.product_id = p.id`;
+  // Get all unique SKUs with their aggregated inventory
+  let query = `SELECT 
+    wi.sku,
+    SUM(wi.on_hand) as total_on_hand,
+    SUM(wi.reserved) as total_reserved,
+    v.title as variant_title,
+    p.title as product_title
+  FROM warehouse_inventory wi
+  LEFT JOIN variants v ON wi.sku = v.sku
+  LEFT JOIN products p ON v.product_id = p.id
+  GROUP BY wi.sku`;
+  
   const params: unknown[] = [];
 
   const conditions: string[] = [];
   if (lowStock) {
-    conditions.push(`(i.on_hand - i.reserved) <= 10`);
+    conditions.push(`(SUM(wi.on_hand) - SUM(wi.reserved)) <= 10`);
   }
   if (cursor) {
-    conditions.push(`i.sku > ?`);
+    conditions.push(`wi.sku > ?`);
     params.push(cursor);
   }
 
   if (conditions.length > 0) {
-    query += ` WHERE ${conditions.join(' AND ')}`;
+    query += ` HAVING ${conditions.join(' AND ')}`;
   }
 
-  query += ` ORDER BY i.sku LIMIT ?`;
+  query += ` ORDER BY wi.sku LIMIT ?`;
   params.push(limit + 1);
 
   const items = await db.query<any>(query, params);
@@ -107,15 +126,36 @@ app.openapi(listInventory, async (c) => {
 
   const nextCursor = hasMore && items.length > 0 ? items[items.length - 1].sku : null;
 
+  // For each item, get warehouse breakdown
+  const itemsWithWarehouses = await Promise.all(
+    items.map(async (item) => {
+      const warehouses = await db.query<any>(
+        `SELECT wi.*, w.display_name as warehouse_name
+         FROM warehouse_inventory wi
+         LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+         WHERE wi.sku = ?
+         ORDER BY w.priority ASC`,
+        [item.sku]
+      );
+
+      return {
+        sku: item.sku,
+        on_hand: item.total_on_hand || 0,
+        reserved: item.total_reserved || 0,
+        available: (item.total_on_hand || 0) - (item.total_reserved || 0),
+        variant_title: item.variant_title,
+        product_title: item.product_title,
+        warehouses: warehouses.map(w => ({
+          warehouse_id: w.warehouse_id,
+          warehouse_name: w.warehouse_name,
+          quantity: w.on_hand,
+        })),
+      };
+    })
+  );
+
   return c.json({
-    items: items.map((i) => ({
-      sku: i.sku,
-      on_hand: i.on_hand,
-      reserved: i.reserved,
-      available: i.on_hand - i.reserved,
-      variant_title: i.variant_title,
-      product_title: i.product_title,
-    })),
+    items: itemsWithWarehouses,
     pagination: {
       has_more: hasMore,
       next_cursor: nextCursor,
@@ -349,13 +389,39 @@ app.openapi(adjustWarehouseInventory, async (c) => {
   // Check low inventory at warehouse level
   await checkLowInventory(c.var.db, c.executionCtx, sku, available);
 
+  // Get all warehouses for this SKU and product info
+  const allWarehouses = await db.query<any>(
+    `SELECT wi.*, w.display_name as warehouse_name
+     FROM warehouse_inventory wi
+     LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+     WHERE wi.sku = ?
+     ORDER BY w.priority ASC`,
+    [sku]
+  );
+
+  const [variantInfo] = await db.query<any>(
+    `SELECT v.title as variant_title, p.title as product_title
+     FROM variants v
+     LEFT JOIN products p ON v.product_id = p.id
+     WHERE v.sku = ?`,
+    [sku]
+  );
+
+  const totalOnHand = allWarehouses.reduce((sum, w) => sum + (w.on_hand || 0), 0);
+  const totalReserved = allWarehouses.reduce((sum, w) => sum + (w.reserved || 0), 0);
+
   return c.json({
-    sku: level.sku,
-    warehouse_id: level.warehouse_id,
-    warehouse_name: level.warehouse_name,
-    on_hand: level.on_hand,
-    reserved: level.reserved,
-    available,
+    sku: sku,
+    on_hand: totalOnHand,
+    reserved: totalReserved,
+    available: totalOnHand - totalReserved,
+    variant_title: variantInfo?.variant_title,
+    product_title: variantInfo?.product_title,
+    warehouses: allWarehouses.map(w => ({
+      warehouse_id: w.warehouse_id,
+      warehouse_name: w.warehouse_name,
+      quantity: w.on_hand,
+    })),
   }, 200);
 });
 

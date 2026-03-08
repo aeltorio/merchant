@@ -2,6 +2,7 @@
 
 import path from 'path';
 import { config as loadEnv } from 'dotenv';
+import { seedCurrenciesAndCountries } from './seed-data';
 
 // calculate directory of current module (ESM compatible)
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
@@ -71,6 +72,36 @@ async function init() {
     throw new Error(`Failed to create API keys: ${response.status} ${error}`);
   }
 
+  // Helper function to make API calls with the admin key
+  const api = async (path: string, body?: any) => {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        Authorization: `Bearer ${adminKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(`${path}: ${err.error?.message || res.statusText}`);
+    }
+
+    return res.json();
+  };
+
+  // Create base data (currencies and countries)
+  console.log('\n📊 Creating base data...');
+  try {
+    const result = await seedCurrenciesAndCountries(api);
+    console.log(`   ✅ Created ${Object.keys(result.currencyMap).length} currencies`);
+    console.log(`   ✅ Created ${Object.keys(result.countryMap).length} countries`);
+  } catch (err: any) {
+    console.error('   ❌ Failed to create base data:', err.message);
+    throw err;
+  }
+
   console.log('\n✅ Merchant initialized!\n');
   console.log('─'.repeat(50));
   console.log('\n🔑 API Keys (save these, shown only once):\n');
@@ -87,7 +118,7 @@ async function init() {
   console.log(
     `        -d '{"stripe_secret_key":"sk_test_...","stripe_webhook_secret":"whsec_..."}'\n`
   );
-  console.log('   3. Seed demo data:');
+  console.log('   3. Seed demo data (regions, products, orders):');
   console.log(`      npx tsx scripts/seed.ts ${baseUrl} ${adminKey}\n`);
   console.log('   4. Start admin dashboard:');
   console.log('      cd admin && npm install && npm run dev\n');

@@ -275,19 +275,54 @@ const createTestOrder = createRoute({
 });
 
 app.openapi(createTestOrder, async (c) => {
-  const { customer_email, items, discount_code } = c.req.valid('json');
+  const { customer_email, items, discount_code, region_id } = c.req.valid('json');
   const db = getDb(c.var.db);
+
+  // Get region (use specified region or default)
+  let regionId = region_id;
+  if (!regionId) {
+    const [defaultRegion] = await db.query<any>(`SELECT id FROM regions WHERE is_default = 1 AND status = 'active'`);
+    if (!defaultRegion) throw ApiError.notFound('No default region configured');
+    regionId = defaultRegion.id;
+  } else {
+    const [region] = await db.query<any>(`SELECT id FROM regions WHERE id = ? AND status = 'active'`, [regionId]);
+    if (!region) throw ApiError.notFound('Region not found');
+  }
 
   let subtotal = 0;
   const orderItems = [];
+
+  // Get warehouses for this region
+  const regionWarehouses = await db.query<any>(
+    `SELECT w.id FROM warehouses w
+     JOIN region_warehouses rw ON w.id = rw.warehouse_id
+     WHERE rw.region_id = ?`,
+    [regionId]
+  );
+  
+  const warehouseIds = regionWarehouses.map(w => w.id);
 
   for (const { sku, qty } of items) {
     const [variant] = await db.query<any>(`SELECT * FROM variants WHERE sku = ?`, [sku]);
     if (!variant) throw ApiError.notFound(`SKU not found: ${sku}`);
 
-    const [inv] = await db.query<any>(`SELECT * FROM inventory WHERE sku = ?`, [sku]);
-    const available = (inv?.on_hand ?? 0) - (inv?.reserved ?? 0);
-    if (available < qty) throw ApiError.insufficientInventory(sku);
+    // Calculate available quantity across all warehouses in this region
+    let totalAvailable = 0;
+    if (warehouseIds.length > 0) {
+      const placeholders = warehouseIds.map(() => '?').join(',');
+      const warehouseInv = await db.query<any>(
+        `SELECT on_hand, reserved FROM warehouse_inventory WHERE sku = ? AND warehouse_id IN (${placeholders})`,
+        [sku, ...warehouseIds]
+      );
+      
+      totalAvailable = warehouseInv.reduce((sum, inv) => sum + ((inv.on_hand ?? 0) - (inv.reserved ?? 0)), 0);
+    } else {
+      // Fallback to global inventory if no regional warehouses
+      const [inv] = await db.query<any>(`SELECT * FROM inventory WHERE sku = ?`, [sku]);
+      totalAvailable = (inv?.on_hand ?? 0) - (inv?.reserved ?? 0);
+    }
+    
+    if (totalAvailable < qty) throw ApiError.insufficientInventory(sku);
 
     subtotal += variant.price_cents * qty;
     orderItems.push({
@@ -407,11 +442,44 @@ app.openapi(createTestOrder, async (c) => {
       [uuid(), orderId, item.sku, item.title, item.qty, item.unit_price_cents]
     );
 
-    await db.run(`UPDATE inventory SET on_hand = on_hand - ?, updated_at = ? WHERE sku = ?`, [
-      item.qty,
-      timestamp,
-      item.sku,
-    ]);
+    // Reduce inventory from region warehouses by priority
+    let remainingQty = item.qty;
+    
+    if (warehouseIds.length > 0) {
+      const placeholders = warehouseIds.map(() => '?').join(',');
+      const warehouses = await db.query<any>(
+        `SELECT w.id, w.priority FROM warehouses w
+         JOIN region_warehouses rw ON w.id = rw.warehouse_id
+         WHERE rw.region_id = ? AND w.id IN (${placeholders})
+         ORDER BY w.priority ASC`,
+        [regionId, ...warehouseIds]
+      );
+
+      for (const warehouse of warehouses) {
+        if (remainingQty <= 0) break;
+
+        const [inv] = await db.query<any>(
+          `SELECT on_hand FROM warehouse_inventory WHERE sku = ? AND warehouse_id = ?`,
+          [item.sku, warehouse.id]
+        );
+
+        const qtyToTake = Math.min(remainingQty, inv?.on_hand ?? 0);
+        if (qtyToTake > 0) {
+          await db.run(
+            `UPDATE warehouse_inventory SET on_hand = on_hand - ?, updated_at = ? WHERE sku = ? AND warehouse_id = ?`,
+            [qtyToTake, timestamp, item.sku, warehouse.id]
+          );
+          remainingQty -= qtyToTake;
+        }
+      }
+    } else {
+      // Fallback to global inventory
+      await db.run(`UPDATE inventory SET on_hand = on_hand - ?, updated_at = ? WHERE sku = ?`, [
+        item.qty,
+        timestamp,
+        item.sku,
+      ]);
+    }
   }
 
   if (discount && discountAmountCents > 0) {
