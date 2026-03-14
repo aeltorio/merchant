@@ -56,10 +56,10 @@ export type HonoEnv = {
   Variables: Variables;
 };
 
-export type AuthRole = 'public' | 'admin' | 'oauth';
+export type AuthRole = 'public' | 'admin' | 'oauth' | 'superadmin';
 
 export type AuthContext = {
-  role: AuthRole;
+  role: AuthRole | AuthRole[];
   stripeSecretKey: string | null;
   stripeWebhookSecret: string | null;
   oauthScopes?: string[];

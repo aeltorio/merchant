@@ -190,7 +190,7 @@ const listDiscounts = createRoute({
   path: '/',
   tags: ['Discounts'],
   summary: 'List all discounts',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   responses: {
     200: { content: { 'application/json': { schema: DiscountListResponse } }, description: 'List of discounts' },
@@ -226,7 +226,7 @@ const getDiscount = createRoute({
   path: '/{id}',
   tags: ['Discounts'],
   summary: 'Get discount by ID',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -265,7 +265,7 @@ const createDiscount = createRoute({
   path: '/',
   tags: ['Discounts'],
   summary: 'Create a discount',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     body: { content: { 'application/json': { schema: CreateDiscountBody } } },
@@ -376,7 +376,7 @@ const updateDiscount = createRoute({
   path: '/{id}',
   tags: ['Discounts'],
   summary: 'Update a discount',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -530,7 +530,7 @@ const deleteDiscount = createRoute({
   path: '/{id}',
   tags: ['Discounts'],
   summary: 'Deactivate a discount',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {

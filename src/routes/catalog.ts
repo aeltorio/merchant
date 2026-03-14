@@ -227,7 +227,7 @@ const createProduct = createRoute({
   path: '/',
   tags: ['Products'],
   summary: 'Create product',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateProductBody } } } },
   responses: {
@@ -259,7 +259,7 @@ const updateProduct = createRoute({
   path: '/{id}',
   tags: ['Products'],
   summary: 'Update product',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -324,7 +324,7 @@ const deleteProduct = createRoute({
   path: '/{id}',
   tags: ['Products'],
   summary: 'Delete product',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -371,7 +371,7 @@ const createVariant = createRoute({
   path: '/{id}/variants',
   tags: ['Products'],
   summary: 'Add variant to product',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -416,7 +416,7 @@ const updateVariant = createRoute({
   path: '/{id}/variants/{variantId}',
   tags: ['Products'],
   summary: 'Update variant',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: VariantIdParam,
@@ -488,7 +488,7 @@ const deleteVariant = createRoute({
   path: '/{id}/variants/{variantId}',
   tags: ['Products'],
   summary: 'Delete variant',
-  security: [{ bearerAuth: [] }],
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: VariantIdParam },
   responses: {

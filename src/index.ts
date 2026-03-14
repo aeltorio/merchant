@@ -27,6 +27,11 @@ type Variables = {
 
 const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>();
 
+app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
+  type: 'http',
+  scheme: 'bearer',
+});
+
 app.use('*', cors());
 
 app.use('*', async (c, next) => {

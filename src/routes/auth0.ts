@@ -1,9 +1,11 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
-import { authMiddleware, adminOnly } from '../middleware/auth';
+import { authMiddleware, adminOnly, superAdminOnly } from '../middleware/auth';
 import { getManagementToken, addPermissionsToUser } from '../lib/auth0';
 import { ApiError, type HonoEnv } from '../types';
 
 const app = new OpenAPIHono<HonoEnv>();
+
+app.use('*', authMiddleware);
 
 const auth0TokenRoute = createRoute({
   method: 'post',
@@ -12,8 +14,8 @@ const auth0TokenRoute = createRoute({
   summary: 'Retrieve an Auth0 Management API token',
   description: 'Calls Auth0 using the client_credentials grant, caches the '
     + 'result and returns the raw access token (for use by admin UIs).',
-  security: [{ bearerAuth: ["admin:store"] }],
-  middleware: [authMiddleware, adminOnly] as const,
+  security: [{ bearerAuth: ["auth0:admin:api"] }],
+  middleware: [superAdminOnly] as const,
   responses: {
     200: { description: 'Token acquired' },
     401: { description: 'Unauthorized' },

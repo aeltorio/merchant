@@ -19,31 +19,6 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   const stripeWebhookSecret = c.env.STRIPE_WEBHOOK_SECRET || null;
 
   const isOAuthToken = token.length === 64 && /^[a-f0-9]+$/.test(token);
-  if (isOAuthToken) {
-    const tokenHash = await hashKey(token);
-    const oauthResult = await db.query<any>(
-      `SELECT t.*, c.email as customer_email
-       FROM oauth_tokens t
-       JOIN customers c ON t.customer_id = c.id
-       WHERE t.access_token_hash = ? AND t.access_expires_at > ?
-       LIMIT 1`,
-      [tokenHash, now()]
-    );
-
-    if (oauthResult.length > 0) {
-      const row = oauthResult[0];
-      c.set('auth', {
-        role: 'oauth',
-        stripeSecretKey,
-        stripeWebhookSecret,
-        oauthScopes: row.scope?.split(' ') || [],
-        customerEmail: row.customer_email,
-      });
-
-      await next();
-      return;
-    }
-  }
 
   // ------------------------------------------------------------------
   // Auth0 JWT support
@@ -95,6 +70,16 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
       throw ApiError.forbidden(`${requiredPerm} permission required`);
     }
 
+    if (perms.includes(c.env.ADMIN_AUTH0_PERMISSION || 'auth0:admin:api')) {
+      c.set('auth', {
+        role: ['admin', 'superadmin'],
+        stripeSecretKey,
+        stripeWebhookSecret,
+      });
+      await next();
+      return;
+    }
+
     // treat a valid Auth0 token as an admin user
     c.set('auth', {
       role: 'admin',
@@ -104,6 +89,32 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
 
     await next();
     return;
+  }
+
+  if (isOAuthToken) {
+    const tokenHash = await hashKey(token);
+    const oauthResult = await db.query<any>(
+      `SELECT t.*, c.email as customer_email
+       FROM oauth_tokens t
+       JOIN customers c ON t.customer_id = c.id
+       WHERE t.access_token_hash = ? AND t.access_expires_at > ?
+       LIMIT 1`,
+      [tokenHash, now()]
+    );
+
+    if (oauthResult.length > 0) {
+      const row = oauthResult[0];
+      c.set('auth', {
+        role: 'oauth',
+        stripeSecretKey,
+        stripeWebhookSecret,
+        oauthScopes: row.scope?.split(' ') || [],
+        customerEmail: row.customer_email,
+      });
+
+      await next();
+      return;
+    }
   }
 
   const keyHash = await hashKey(token);
@@ -125,10 +136,32 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
   await next();
 });
 
+export const superAdminOnly = createMiddleware<HonoEnv>(async (c, next) => {
+  const auth = c.get('auth');
+
+  if (Array.isArray(auth.role)) {
+    if (!auth.role.includes('superadmin')) {
+      console.warn('Superadmin access required, but user has roles:', auth.role);
+      throw ApiError.forbidden('Superadmin access required');
+    }
+  } else if (auth.role !== 'superadmin') {
+    console.warn('Superadmin access required, but user has role:', auth.role);
+    throw ApiError.forbidden('Superadmin access required');
+  }
+
+  await next();
+});
+
 export const adminOnly = createMiddleware<HonoEnv>(async (c, next) => {
   const auth = c.get('auth');
 
-  if (auth.role !== 'admin') {
+  if (Array.isArray(auth.role)) {
+    if (!auth.role.includes('admin')) {
+      console.warn('Admin access required, but user has roles:', auth.role);
+      throw ApiError.forbidden('Admin access required');
+    }
+  } else if (auth.role !== 'admin') {
+    console.warn('Admin access required, but user has role:', auth.role);
     throw ApiError.forbidden('Admin access required');
   }
 
