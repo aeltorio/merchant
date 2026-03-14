@@ -12,6 +12,7 @@ import {
   WarehouseInventoryQuery,
   WarehouseInventoryListResponse,
   AdjustWarehouseInventoryBody,
+  DeleteWarehouseInventoryBody,
   WarehouseInventoryItem,
   RegionalInventoryQuery,
   ErrorResponse,
@@ -390,6 +391,108 @@ app.openapi(adjustWarehouseInventory, async (c) => {
   await checkLowInventory(c.var.db, c.executionCtx, sku, available);
 
   // Get all warehouses for this SKU and product info
+  const allWarehouses = await db.query<any>(
+    `SELECT wi.*, w.display_name as warehouse_name
+     FROM warehouse_inventory wi
+     LEFT JOIN warehouses w ON wi.warehouse_id = w.id
+     WHERE wi.sku = ?
+     ORDER BY w.priority ASC`,
+    [sku]
+  );
+
+  const [variantInfo] = await db.query<any>(
+    `SELECT v.title as variant_title, p.title as product_title
+     FROM variants v
+     LEFT JOIN products p ON v.product_id = p.id
+     WHERE v.sku = ?`,
+    [sku]
+  );
+
+  const totalOnHand = allWarehouses.reduce((sum, w) => sum + (w.on_hand || 0), 0);
+  const totalReserved = allWarehouses.reduce((sum, w) => sum + (w.reserved || 0), 0);
+
+  return c.json({
+    sku: sku,
+    on_hand: totalOnHand,
+    reserved: totalReserved,
+    available: totalOnHand - totalReserved,
+    variant_title: variantInfo?.variant_title,
+    product_title: variantInfo?.product_title,
+    warehouses: allWarehouses.map(w => ({
+      warehouse_id: w.warehouse_id,
+      warehouse_name: w.warehouse_name,
+      quantity: w.on_hand,
+    })),
+  }, 200);
+});
+
+/**
+ * Delete a warehouse inventory record (only when quantity is 0).
+ * Removes the entire warehouse_inventory entry for a SKU at a specific warehouse.
+ */
+const deleteWarehouseInventory = createRoute({
+  method: 'post',
+  path: '/{sku}/warehouse-delete',
+  tags: ['Inventory - Warehouse'],
+  summary: 'Delete warehouse inventory',
+  description: 'Remove a SKU from a warehouse (only when on_hand is 0)',
+  security: [{ bearerAuth: [] }],
+  middleware: [adminOnly] as const,
+  request: {
+    params: SkuParam,
+    body: { content: { 'application/json': { schema: DeleteWarehouseInventoryBody } } },
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: WarehouseInventoryItem } },
+      description: 'Warehouse inventory record deleted successfully',
+    },
+    400: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'Cannot delete when inventory level is not 0',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'SKU or warehouse not found',
+    },
+  },
+});
+
+app.openapi(deleteWarehouseInventory, async (c) => {
+  const { sku } = c.req.valid('param');
+  const { warehouse_id } = c.req.valid('json');
+  const db = getDb(c.var.db);
+
+  // Verify warehouse exists
+  const [warehouse] = await db.query<any>(`SELECT * FROM warehouses WHERE id = ?`, [warehouse_id]);
+  if (!warehouse) throw ApiError.notFound('Warehouse not found');
+
+  // Verify SKU exists
+  const [variant] = await db.query<any>(`SELECT * FROM variants WHERE sku = ?`, [sku]);
+  if (!variant) throw ApiError.notFound('SKU not found');
+
+  // Get warehouse inventory record
+  const [existing] = await db.query<any>(
+    `SELECT * FROM warehouse_inventory WHERE sku = ? AND warehouse_id = ?`,
+    [sku, warehouse_id]
+  );
+
+  if (!existing) throw ApiError.notFound('Warehouse inventory record not found');
+
+  // Only allow deletion if on_hand is 0
+  if (existing.on_hand !== 0) {
+    throw ApiError.invalidRequest(
+      `Cannot delete warehouse inventory when on_hand is not 0. Current on_hand: ${existing.on_hand}`
+    );
+  }
+
+  // Delete the warehouse inventory record
+  await db.run(
+    `DELETE FROM warehouse_inventory WHERE sku = ? AND warehouse_id = ?`,
+    [sku, warehouse_id]
+  );
+
+  // Get updated totals across all warehouses
   const allWarehouses = await db.query<any>(
     `SELECT wi.*, w.display_name as warehouse_name
      FROM warehouse_inventory wi
