@@ -411,6 +411,17 @@ app.openapi(adjustWarehouseInventory, async (c) => {
   const totalOnHand = allWarehouses.reduce((sum, w) => sum + (w.on_hand || 0), 0);
   const totalReserved = allWarehouses.reduce((sum, w) => sum + (w.reserved || 0), 0);
 
+  // --- Phase 1: HOTFIX — Sync warehouse_inventory total → inventory (legacy checkout engine) ---
+  // The checkout engine reads from `inventory` for availability checks.
+  // We mirror the aggregated on_hand and reserved here so both tables stay consistent.
+  await db.run(
+    `UPDATE inventory
+     SET on_hand = ?, reserved = ?, updated_at = ?
+     WHERE sku = ?`,
+    totalOnHand, totalReserved, now(), sku
+  );
+  // --- End sync block -------------------------------------------------------
+
   return c.json({
     sku: sku,
     on_hand: totalOnHand,
@@ -512,6 +523,17 @@ app.openapi(deleteWarehouseInventory, async (c) => {
 
   const totalOnHand = allWarehouses.reduce((sum, w) => sum + (w.on_hand || 0), 0);
   const totalReserved = allWarehouses.reduce((sum, w) => sum + (w.reserved || 0), 0);
+
+  // --- Phase 1: HOTFIX — Re-sync after warehouse record deletion ---
+  // After removing a warehouse row, recalculate the total on_hand and reserved across
+  // remaining warehouses and update the legacy inventory table.
+  await db.run(
+    `UPDATE inventory
+     SET on_hand = ?, reserved = ?, updated_at = ?
+     WHERE sku = ?`,
+    totalOnHand, totalReserved, now(), sku
+  );
+  // --- End sync block -------------------------------------------------------
 
   return c.json({
     sku: sku,

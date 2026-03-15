@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/auth';
 import { ApiError, uuid, now, isValidEmail, type HonoEnv } from '../types';
 import { validateDiscount, calculateDiscount, type Discount } from './discounts';
 import { resolveVariantPrice, getCurrencyIdForRegion } from '../lib/pricing';
+import { getAvailableQty, reserveInventory, releaseReservation } from '../lib/inventory';
 import {
   CartIdParam,
   CartResponse,
@@ -197,9 +198,10 @@ app.openapi(addCartItems, async (c) => {
     if (!variant) throw ApiError.notFound(`SKU not found: ${sku}`);
     if (variant.status !== 'active') throw ApiError.invalidRequest(`SKU not active: ${sku}`);
 
-    const [inv] = await db.query<any>(`SELECT * FROM inventory WHERE sku = ?`, [sku]);
-    const available = (inv?.on_hand ?? 0) - (inv?.reserved ?? 0);
+    // --- Phase 2b: Use unified helper (warehouse-aware) ---
+    const available = await getAvailableQty(db, sku);
     if (available < qty) throw ApiError.insufficientInventory(sku);
+    // --- End Phase 2b ---
 
     // Resolve price using multi-currency helper (Option A: strict fallback)
     const unitPriceCents = await resolveVariantPrice(db, variant.id, currencyId);
@@ -442,31 +444,27 @@ app.openapi(checkoutCart, async (c) => {
 
   const reservedItems: { sku: string; qty: number }[] = [];
 
+  // --- Phase 2b: Use unified helper for release ---
   const releaseReservedInventory = async () => {
     for (const item of reservedItems) {
-      await db.run(
-        `UPDATE inventory SET reserved = MAX(reserved - ?, 0), updated_at = ? WHERE sku = ?`,
-        [item.qty, now(), item.sku]
-      );
+      await releaseReservation(db, item.sku, item.qty);
     }
     reservedItems.length = 0;
   };
+  // --- End Phase 2b ---
 
   try {
+    // --- Phase 2b: Use unified helper for reserve ---
     for (const item of items) {
-      const result = await db.run(
-        `UPDATE inventory SET reserved = reserved + ?, updated_at = ? 
-         WHERE sku = ? AND on_hand - reserved >= ?`,
-        [item.qty, now(), item.sku, item.qty]
-      );
-
-      if (result.changes === 0) {
+      try {
+        await reserveInventory(db, item.sku, item.qty);
+        reservedItems.push({ sku: item.sku, qty: item.qty });
+      } catch (err) {
         await releaseReservedInventory();
-        throw ApiError.insufficientInventory(item.sku);
+        throw err;
       }
-
-      reservedItems.push({ sku: item.sku, qty: item.qty });
     }
+    // --- End Phase 2b ---
   } catch (err) {
     await releaseReservedDiscount();
     await releaseReservedInventory();
