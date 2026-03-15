@@ -511,6 +511,16 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
   
   const { line_items, buyer, currency, payment } = body;
   
+  // Determine the effective currency for this update.
+  // If the payload supplies a currency, use it; otherwise keep the session currency.
+  const activeCurrency = (currency ?? session.currency).toUpperCase();
+
+  // Resolve currency_id for pricing lookups (variant_prices uses currency UUIDs).
+  const currencyId = await getCurrencyIdFromCode(db, activeCurrency);
+  if (!currencyId) {
+    throw ApiError.invalidRequest(`Currency ${activeCurrency} is not configured or is inactive`);
+  }
+
   // Re-resolve line items
   const resolvedItems: UCPLineItem[] = [];
   const messages: UCPMessage[] = [];
@@ -539,8 +549,21 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
       });
       continue;
     }
-    
-    const unitPrice = variant.price_cents;
+
+    // Resolve price via variant_prices for the active currency
+    let unitPrice: number;
+    try {
+      unitPrice = await resolveVariantPrice(db, variant.id, currencyId);
+    } catch (err) {
+      messages.push({
+        type: 'error',
+        code: 'price_not_available',
+        content: `Price not configured for variant ${variant.sku} in currency ${activeCurrency}`,
+        severity: 'recoverable',
+      });
+      continue;
+    }
+
     const totalPrice = unitPrice * quantity;
     subtotal += totalPrice;
     
@@ -553,8 +576,8 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
         image_url: variant.image_url,
       },
       quantity,
-      unit_price: { amount: unitPrice, currency: (currency || session.currency).toUpperCase() },
-      total_price: { amount: totalPrice, currency: (currency || session.currency).toUpperCase() },
+      unit_price: { amount: unitPrice, currency: activeCurrency },
+      total_price: { amount: totalPrice, currency: activeCurrency },
     });
   }
   
@@ -565,8 +588,8 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
   }
   
   const totals = [
-    { type: 'subtotal', amount: subtotal, currency: (currency || session.currency).toUpperCase() },
-    { type: 'grand_total', amount: subtotal, currency: (currency || session.currency).toUpperCase() },
+    { type: 'subtotal', amount: subtotal, currency: activeCurrency },
+    { type: 'grand_total', amount: subtotal, currency: activeCurrency },
   ];
   
   await db.run(
@@ -575,7 +598,7 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
      WHERE id = ?`,
     [
       status,
-      (currency || session.currency).toUpperCase(),
+      activeCurrency,
       JSON.stringify(resolvedItems),
       JSON.stringify(buyer || null),
       JSON.stringify(totals),
@@ -603,7 +626,7 @@ ucp.put('/ucp/v1/checkout-sessions/:id', async (c) => {
     ucp: ucpEnvelope(activeCapabilities()),
     id: sessionId,
     status,
-    currency: (currency || session.currency).toUpperCase(),
+    currency: activeCurrency,
     line_items: resolvedItems,
     buyer: buyer || undefined,
     totals,
