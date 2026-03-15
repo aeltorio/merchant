@@ -300,13 +300,13 @@ async function seed() {
   const products = [
     {
       title: 'Classic Tee',
-      description: 'Premium cotton t-shirt. Soft, breathable, and built to last.',
+      description: 'Premium cotton t-shirt. Soft, breathable, and built to last, with our logo…',
     },
-    { title: 'Hoodie', description: 'Cozy pullover hoodie. Perfect for coding sessions.' },
-    { title: 'Cap', description: 'Embroidered baseball cap. One size fits most.' },
+    { title: 'Hoodie', description: '{"en-US":"<p>Cozy pullover hoodie with large logo. Perfect for coding sessions…</p>","fr-FR":"<p>Sweat à capuche confortable avec grand logo. Parfait pour les sessions de codage…</p>"}' },
+    { title: 'Cap', description: '{"en-US":"<p><strong>Embroidered</strong> baseball cap with logo. One size fits all heads…</p>"}' },
     {
       title: 'Sticker Pack',
-      description: 'Set of 5 die-cut vinyl stickers. Waterproof and durable.',
+      description: '{"en-US":"<p>Set of 5 die-cut vinyl stickers. Beautiful, waterproof and durable…</p>"}',
     },
   ];
 
