@@ -664,4 +664,96 @@ app.openapi(deleteVariantPrice, async (c) => {
   return c.json({ deleted: true }, 200);
 });
 
+// ============================================================
+// PRICING AUDIT - Find variants missing prices for a currency
+// ============================================================
+
+const PricingAuditQuery = z.object({
+  currencyId: z.string().uuid().openapi({
+    param: { name: 'currencyId', in: 'query' },
+    description: 'UUID of the currency to check (from currencies table)',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  }),
+});
+
+const PricingAuditResponse = z.object({
+  currencyId: z.string().uuid(),
+  currencyCode: z.string(),
+  missing: z.array(z.object({
+    variantId: z.string().uuid(),
+    variantSku: z.string(),
+    variantTitle: z.string(),
+    productId: z.string().uuid(),
+    productTitle: z.string(),
+  })),
+  total: z.number().int(),
+}).openapi('PricingAudit');
+
+const pricingAudit = createRoute({
+  method: 'get',
+  path: '/pricing-audit',
+  tags: ['Products'],
+  summary: 'List active variants missing a price for a given currency',
+  description:
+    'Returns all active variants in active products that have no entry in variant_prices ' +
+    'for the specified currency. Useful when using strict pricing (Option A).',
+  security: [{ bearerAuth: ["sk_", "admin:store"] }],
+  middleware: [adminOnly] as const,
+  request: {
+    query: PricingAuditQuery,
+  },
+  responses: {
+    200: {
+      content: { 'application/json': { schema: PricingAuditResponse } },
+      description: 'List of variants missing a price',
+    },
+    404: {
+      content: { 'application/json': { schema: ErrorResponse } },
+      description: 'Currency not found',
+    },
+  },
+});
+
+app.openapi(pricingAudit, async (c) => {
+  const { currencyId } = c.req.valid('query');
+  const db = getDb(c.var.db);
+
+  const [currency] = await db.query<{ id: string; code: string }>(
+    `SELECT id, code FROM currencies WHERE id = ?`,
+    [currencyId]
+  );
+  if (!currency) throw ApiError.notFound('Currency not found');
+
+  const missing = await db.query<{
+    variantId: string;
+    variantSku: string;
+    variantTitle: string;
+    productId: string;
+    productTitle: string;
+  }>(
+    `SELECT
+       v.id        AS variantId,
+       v.sku       AS variantSku,
+       v.title     AS variantTitle,
+       p.id        AS productId,
+       p.title     AS productTitle
+     FROM variants v
+     JOIN products p ON v.product_id = p.id
+     LEFT JOIN variant_prices vp
+       ON vp.variant_id = v.id AND vp.currency_id = ?
+     WHERE v.status = 'active'
+       AND p.status = 'active'
+       AND vp.id IS NULL
+     ORDER BY p.title ASC, v.title ASC`,
+    [currencyId]
+  );
+
+  return c.json({
+    currencyId,
+    currencyCode: currency.code,
+    missing: missing ?? [],
+    total: missing?.length ?? 0,
+  }, 200);
+});
+
 export { app as catalog };
