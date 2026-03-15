@@ -97,10 +97,10 @@ describe('API Helpers', () => {
       });
 
       const res = await fetch('http://localhost:8787/v1/products/invalid');
-      const data = await res.json();
+      const data = (await res.json()) as { error?: { message?: string } };
 
       expect(res.ok).toBe(false);
-      expect(data.error.message).toBe('Not found');
+      expect(data.error?.message).toBe('Not found');
     });
 
     it('should encode query parameters correctly', () => {

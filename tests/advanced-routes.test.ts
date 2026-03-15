@@ -57,7 +57,7 @@ async function api<T = any>(
     });
 
     if (!res.ok && !expectError) {
-      const errorData = await res.json().catch(() => ({}));
+      const errorData = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
       
       // Handle rate limiting (429)
       if (res.status === 429 && retryCount < 5) {
