@@ -38,7 +38,7 @@ const listWebhooks = createRoute({
   path: '/',
   tags: ['Webhooks'],
   summary: 'List all webhooks',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   responses: {
     200: { content: { 'application/json': { schema: WebhookListResponse } }, description: 'List of webhooks' },
@@ -67,7 +67,7 @@ const getWebhook = createRoute({
   path: '/{id}',
   tags: ['Webhooks'],
   summary: 'Get webhook with recent deliveries',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -116,7 +116,7 @@ const createWebhook = createRoute({
   path: '/',
   tags: ['Webhooks'],
   summary: 'Create a webhook',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     body: { content: { 'application/json': { schema: CreateWebhookBody } } },
@@ -173,7 +173,7 @@ const updateWebhook = createRoute({
   path: '/{id}',
   tags: ['Webhooks'],
   summary: 'Update a webhook',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -247,7 +247,7 @@ const deleteWebhook = createRoute({
   path: '/{id}',
   tags: ['Webhooks'],
   summary: 'Delete a webhook',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -274,7 +274,7 @@ const rotateSecret = createRoute({
   path: '/{id}/rotate-secret',
   tags: ['Webhooks'],
   summary: 'Rotate webhook secret',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -301,7 +301,7 @@ const getDelivery = createRoute({
   path: '/{id}/deliveries/{deliveryId}',
   tags: ['Webhooks'],
   summary: 'Get delivery details',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: DeliveryIdParam },
   responses: {
@@ -341,7 +341,7 @@ const retryDeliveryRoute = createRoute({
   path: '/{id}/deliveries/{deliveryId}/retry',
   tags: ['Webhooks'],
   summary: 'Retry a failed delivery',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: DeliveryIdParam },
   responses: {

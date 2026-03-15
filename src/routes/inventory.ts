@@ -28,7 +28,7 @@ const listInventory = createRoute({
   tags: ['Inventory'],
   summary: 'List inventory levels',
   description: 'List all inventory levels with pagination, or get a single SKU by query param',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: InventoryQuery },
   responses: {
@@ -170,7 +170,7 @@ const adjustInventory = createRoute({
   tags: ['Inventory'],
   summary: 'Adjust inventory level',
   description: 'Add or subtract inventory for a SKU with a reason',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: SkuParam,
@@ -240,7 +240,7 @@ const listWarehouseInventory = createRoute({
   tags: ['Inventory - Warehouse'],
   summary: 'List warehouse inventory levels',
   description: 'List inventory levels across warehouses with optional filters',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: WarehouseInventoryQuery },
   responses: {
@@ -311,7 +311,7 @@ const adjustWarehouseInventory = createRoute({
   tags: ['Inventory - Warehouse'],
   summary: 'Adjust warehouse inventory level',
   description: 'Add or subtract inventory for a SKU at a specific warehouse',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: SkuParam,
@@ -436,7 +436,7 @@ const deleteWarehouseInventory = createRoute({
   tags: ['Inventory - Warehouse'],
   summary: 'Delete warehouse inventory',
   description: 'Remove a SKU from a warehouse (only when on_hand is 0)',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: SkuParam,
@@ -534,7 +534,7 @@ const getRegionalInventory = createRoute({
   tags: ['Inventory - Warehouse'],
   summary: 'Get regional inventory',
   description: 'Get aggregated inventory for a SKU across all warehouses in a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: SkuParam,

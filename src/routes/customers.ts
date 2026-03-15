@@ -69,7 +69,7 @@ const listCustomers = createRoute({
   tags: ['Customers'],
   summary: 'List customers',
   description: 'List customers with pagination and optional search',
-  security: [{ bearerAuth: ["sk_", "admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_", "admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: CustomerQuery },
   responses: {
@@ -117,7 +117,7 @@ const getCustomer = createRoute({
   tags: ['Customers'],
   summary: 'Get customer by ID',
   description: 'Returns customer details with addresses',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -149,7 +149,7 @@ const getCustomerOrders = createRoute({
   path: '/{id}/orders',
   tags: ['Customers'],
   summary: 'Get customer order history',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -222,7 +222,7 @@ const updateCustomer = createRoute({
   path: '/{id}',
   tags: ['Customers'],
   summary: 'Update customer',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -282,7 +282,7 @@ const createAddress = createRoute({
   path: '/{id}/addresses',
   tags: ['Customers'],
   summary: 'Add address to customer',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -345,7 +345,7 @@ const deleteAddress = createRoute({
   path: '/{id}/addresses/{addressId}',
   tags: ['Customers'],
   summary: 'Delete customer address',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: AddressIdParam },
   responses: {

@@ -49,7 +49,7 @@ const listCurrencies = createRoute({
   tags: ['Regions - Currencies'],
   summary: 'List all currencies',
   description: 'Get a paginated list of currencies',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: PaginationQuery },
   responses: {
@@ -103,7 +103,7 @@ const createCurrency = createRoute({
   path: '/currencies',
   tags: ['Regions - Currencies'],
   summary: 'Create a new currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateCurrencyBody } } } },
   responses: {
@@ -150,7 +150,7 @@ const getCurrency = createRoute({
   path: '/currencies/{id}',
   tags: ['Regions - Currencies'],
   summary: 'Get a currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -189,7 +189,7 @@ const updateCurrency = createRoute({
   path: '/currencies/{id}',
   tags: ['Regions - Currencies'],
   summary: 'Update a currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -245,7 +245,7 @@ const deleteCurrency = createRoute({
   path: '/currencies/{id}',
   tags: ['Regions - Currencies'],
   summary: 'Delete a currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -330,7 +330,7 @@ const listCountries = createRoute({
   tags: ['Regions - Countries'],
   summary: 'List all countries',
   description: 'Get a paginated list of countries',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: PaginationQuery },
   responses: {
@@ -384,7 +384,7 @@ const createCountry = createRoute({
   path: '/countries',
   tags: ['Regions - Countries'],
   summary: 'Create a new country',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateCountryBody } } } },
   responses: {
@@ -436,7 +436,7 @@ const listCountriesBatch = createRoute({
   tags: ['Regions - Countries'],
   summary: 'List all countries without pagination',
   description: 'Get all countries as a simple array (for bulk operations)',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   responses: {
     200: {
@@ -475,7 +475,7 @@ const createCountriesBatch = createRoute({
   tags: ['Regions - Countries'],
   summary: 'Create multiple countries in one request',
   description: 'Batch create countries for better performance',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     body: {
@@ -544,7 +544,7 @@ const getCountry = createRoute({
   path: '/countries/{id}',
   tags: ['Regions - Countries'],
   summary: 'Get a country',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -582,7 +582,7 @@ const updateCountry = createRoute({
   path: '/countries/{id}',
   tags: ['Regions - Countries'],
   summary: 'Update a country',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -638,7 +638,7 @@ const deleteCountry = createRoute({
   path: '/countries/{id}',
   tags: ['Regions - Countries'],
   summary: 'Delete a country',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -675,7 +675,7 @@ const listWarehouses = createRoute({
   tags: ['Regions - Warehouses'],
   summary: 'List all warehouses',
   description: 'Get a paginated list of warehouses ordered by priority',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: PaginationQuery },
   responses: {
@@ -733,7 +733,7 @@ const createWarehouse = createRoute({
   path: '/warehouses',
   tags: ['Regions - Warehouses'],
   summary: 'Create a new warehouse',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateWarehouseBody } } } },
   responses: {
@@ -784,7 +784,7 @@ const getWarehouse = createRoute({
   path: '/warehouses/{id}',
   tags: ['Regions - Warehouses'],
   summary: 'Get a warehouse',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -827,7 +827,7 @@ const updateWarehouse = createRoute({
   path: '/warehouses/{id}',
   tags: ['Regions - Warehouses'],
   summary: 'Update a warehouse',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -892,7 +892,7 @@ const deleteWarehouse = createRoute({
   path: '/warehouses/{id}',
   tags: ['Regions - Warehouses'],
   summary: 'Delete a warehouse',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -929,7 +929,7 @@ const listShippingRates = createRoute({
   tags: ['Regions - Shipping Rates'],
   summary: 'List all shipping rates',
   description: 'Get a paginated list of shipping rates',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: PaginationQuery },
   responses: {
@@ -984,7 +984,7 @@ const createShippingRate = createRoute({
   path: '/shipping-rates',
   tags: ['Regions - Shipping Rates'],
   summary: 'Create a new shipping rate',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateShippingRateBody } } } },
   responses: {
@@ -1032,7 +1032,7 @@ const getShippingRate = createRoute({
   path: '/shipping-rates/{id}',
   tags: ['Regions - Shipping Rates'],
   summary: 'Get a shipping rate',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -1072,7 +1072,7 @@ const updateShippingRate = createRoute({
   path: '/shipping-rates/{id}',
   tags: ['Regions - Shipping Rates'],
   summary: 'Update a shipping rate',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -1131,7 +1131,7 @@ const deleteShippingRate = createRoute({
   path: '/shipping-rates/{id}',
   tags: ['Regions - Shipping Rates'],
   summary: 'Delete a shipping rate',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -1168,7 +1168,7 @@ const listRegions = createRoute({
   tags: ['Regions'],
   summary: 'List all regions',
   description: 'Get a paginated list of regions',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: PaginationQuery },
   responses: {
@@ -1223,7 +1223,7 @@ const createRegion = createRoute({
   path: '/',
   tags: ['Regions'],
   summary: 'Create a new region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateRegionBody } } } },
   responses: {
@@ -1313,7 +1313,7 @@ const getRegion = createRoute({
   path: '/{id}',
   tags: ['Regions'],
   summary: 'Get a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -1356,7 +1356,7 @@ const updateRegion = createRoute({
   path: '/{id}',
   tags: ['Regions'],
   summary: 'Update a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -1421,7 +1421,7 @@ const deleteRegion = createRoute({
   path: '/{id}',
   tags: ['Regions'],
   summary: 'Delete a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -1457,7 +1457,7 @@ const addCountryToRegion = createRoute({
   path: '/{id}/countries',
   tags: ['Regions - Associations'],
   summary: 'Add a country to a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -1504,7 +1504,7 @@ const addWarehouseToRegion = createRoute({
   path: '/{id}/warehouses',
   tags: ['Regions - Associations'],
   summary: 'Add a warehouse to a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -1551,7 +1551,7 @@ const addShippingRateToRegion = createRoute({
   path: '/{id}/shipping-rates',
   tags: ['Regions - Associations'],
   summary: 'Add a shipping rate to a region',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -1598,7 +1598,7 @@ const addShippingRatePrice = createRoute({
   path: '/shipping-rates/{id}/prices',
   tags: ['Regions - Shipping Rates'],
   summary: 'Add a price to a shipping rate',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,

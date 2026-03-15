@@ -28,7 +28,7 @@ const listOrders = createRoute({
   tags: ['Orders'],
   summary: 'List orders',
   description: 'List orders with pagination and optional filters by status and email',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { query: OrderQuery },
   responses: {
@@ -96,7 +96,7 @@ const getOrder = createRoute({
   path: '/{orderId}',
   tags: ['Orders'],
   summary: 'Get order by ID',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: OrderIdParam },
   responses: {
@@ -122,7 +122,7 @@ const updateOrder = createRoute({
   path: '/{orderId}',
   tags: ['Orders'],
   summary: 'Update order status/tracking',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: OrderIdParam,
@@ -196,7 +196,7 @@ const refundOrder = createRoute({
   tags: ['Orders'],
   summary: 'Refund an order',
   description: 'Full or partial refund via Stripe',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: OrderIdParam,
@@ -263,7 +263,7 @@ const createTestOrder = createRoute({
   tags: ['Orders'],
   summary: 'Create test order',
   description: 'Creates an order without Stripe payment (for testing)',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     body: { content: { 'application/json': { schema: CreateTestOrderBody } } },

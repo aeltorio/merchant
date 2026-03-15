@@ -15,7 +15,7 @@ const uploadImage = createRoute({
   path: '/',
   tags: ['Images'],
   summary: 'Upload an image',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [authMiddleware, adminOnly] as const,
   request: {
     body: {
@@ -102,7 +102,7 @@ const deleteImage = createRoute({
   path: '/{key}',
   tags: ['Images'],
   summary: 'Delete an image',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [authMiddleware, adminOnly] as const,
   request: { params: ImageKeyParam },
   responses: {

@@ -231,7 +231,7 @@ const createProduct = createRoute({
   path: '/',
   tags: ['Products'],
   summary: 'Create product',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { body: { content: { 'application/json': { schema: CreateProductBody } } } },
   responses: {
@@ -263,7 +263,7 @@ const updateProduct = createRoute({
   path: '/{id}',
   tags: ['Products'],
   summary: 'Update product',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -329,7 +329,7 @@ const deleteProduct = createRoute({
   path: '/{id}',
   tags: ['Products'],
   summary: 'Delete product',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: IdParam },
   responses: {
@@ -376,7 +376,7 @@ const createVariant = createRoute({
   path: '/{id}/variants',
   tags: ['Products'],
   summary: 'Add variant to product',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: IdParam,
@@ -421,7 +421,7 @@ const updateVariant = createRoute({
   path: '/{id}/variants/{variantId}',
   tags: ['Products'],
   summary: 'Update variant',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     params: VariantIdParam,
@@ -498,7 +498,7 @@ const deleteVariant = createRoute({
   path: '/{id}/variants/{variantId}',
   tags: ['Products'],
   summary: 'Delete variant',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: VariantIdParam },
   responses: {
@@ -538,7 +538,7 @@ const listVariantPrices = createRoute({
   path: '/{id}/variants/{variantId}/prices',
   tags: ['Products'],
   summary: 'List prices for a variant by currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: VariantIdParam },
   responses: {
@@ -577,7 +577,7 @@ const upsertVariantPrice = createRoute({
   path: '/{id}/variants/{variantId}/prices',
   tags: ['Products'],
   summary: 'Set price for a variant in a specific currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: VariantIdParam, body: { content: { 'application/json': { schema: z.object({ currency_id: z.string().uuid(), price_cents: z.number().int().min(0) }) } } } },
   responses: {
@@ -635,7 +635,7 @@ const deleteVariantPrice = createRoute({
   path: '/{id}/variants/{variantId}/prices/{currencyId}',
   tags: ['Products'],
   summary: 'Remove price for a specific currency',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [adminOnly] as const,
   request: { params: VariantPriceCurrencyParam },
   responses: {
@@ -697,7 +697,7 @@ const pricingAudit = createRoute({
   description:
     'Returns all active variants in active products that have no entry in variant_prices ' +
     'for the specified currency. Useful when using strict pricing (Option A).',
-  security: [{ bearerAuth: ["sk_", "admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_", "admin:store"] }],
   middleware: [adminOnly] as const,
   request: {
     query: PricingAuditQuery,

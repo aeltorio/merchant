@@ -56,7 +56,7 @@ const setupStripe = createRoute({
   tags: ['Setup'],
   summary: 'Connect Stripe',
   description: 'Configure Stripe API keys for payment processing',
-  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  security: [{ bearerAuth: ["legacy sk_","admin:store"] }],
   middleware: [authMiddleware, adminOnly] as const,
   request: {
     body: { content: { 'application/json': { schema: SetupStripeBody } } },
