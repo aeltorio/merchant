@@ -267,6 +267,54 @@ app.openapi(deleteCurrency, async (c) => {
   const [existing] = await db.query<any>('SELECT * FROM currencies WHERE id = ?', [id]);
   if (!existing) throw ApiError.notFound('Currency not found');
 
+  // ── GUARD 1: Active region pointing at this currency ────────────────────
+  // A region can point to this currency via its `currencyid` column.
+  // If we delete the currency, the region will have a broken FK → silent failures.
+  const [usedByRegion] = await db.query<{ displayname: string }>(
+    `SELECT displayname FROM regions WHERE currencyid = ? AND status = 'active' LIMIT 1`,
+    [id]
+  );
+  if (usedByRegion) {
+    throw ApiError.conflict(
+      `Cannot delete currency: it is used by active region "${usedByRegion.displayname}". ` +
+      `Change the region's currency first.`
+    );
+  }
+
+  // ── GUARD 2: Open carts using this currency ─────────────────────────────
+  // A cart stores the currency at creation time (cart.currency is the ISO code).
+  // If we delete the currency, these carts can no longer be updated.
+  const [usedByCarts] = await db.query<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt
+     FROM carts
+     WHERE status = 'open'
+       AND currency = (SELECT code FROM currencies WHERE id = ?)`,
+    [id]
+  );
+  if (usedByCarts && usedByCarts.cnt > 0) {
+    throw ApiError.conflict(
+      `Cannot delete currency: ${usedByCarts.cnt} open cart(s) are using it. ` +
+      `Wait for carts to expire or complete checkout first.`
+    );
+  }
+
+  // ── GUARD 3: Variant prices configured for this currency ────────────────
+  // There are prices in `variantprices` for this currency.
+  // Cascading delete will remove them (ON DELETE CASCADE), but we warn first.
+  // We reject deletion when price records exist to force a conscious action.
+  const [usedByPrices] = await db.query<{ cnt: number }>(
+    `SELECT COUNT(*) as cnt FROM variantprices WHERE currencyid = ?`,
+    [id]
+  );
+  if (usedByPrices && usedByPrices.cnt > 0) {
+    throw ApiError.conflict(
+      `Cannot delete currency: ${usedByPrices.cnt} variant price(s) are configured for it. ` +
+      `Remove all variant prices for this currency first ` +
+      `(or set currency to inactive instead of deleting it).`
+    );
+  }
+
+  // All guards passed → safe to delete
   await db.run('DELETE FROM currencies WHERE id = ?', [id]);
 
   return c.json({ deleted: true }, 200);
