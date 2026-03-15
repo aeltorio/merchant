@@ -12,6 +12,8 @@ import {
   CreateCartBody,
   CheckoutBody,
   ApplyDiscountBody,
+  CreateVariantPriceBody,
+  VariantResponse,
 } from '../src/schemas';
 
 describe('Schema Validation', () => {
@@ -474,6 +476,79 @@ describe('Schema Validation', () => {
         });
         expect(result.success).toBe(false);
       });
+    });
+  });
+
+  describe('Variant Pricing Schema', () => {
+    it('should validate CreateVariantPriceBody with valid data', () => {
+      const valid = {
+        currency_id: '550e8400-e29b-41d4-a716-446655440000',
+        price_cents: 2999,
+      };
+      const result = CreateVariantPriceBody.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject variant price with negative price', () => {
+      const invalid = {
+        currency_id: '550e8400-e29b-41d4-a716-446655440000',
+        price_cents: -100,
+      };
+      const result = CreateVariantPriceBody.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject variant price with missing currency_id', () => {
+      const invalid = {
+        price_cents: 2999,
+      };
+      const result = CreateVariantPriceBody.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject variant price with missing price_cents', () => {
+      const invalid = {
+        currency_id: '550e8400-e29b-41d4-a716-446655440000',
+      };
+      const result = CreateVariantPriceBody.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject variant price with non-integer price', () => {
+      const invalid = {
+        currency_id: '550e8400-e29b-41d4-a716-446655440000',
+        price_cents: 29.99,
+      };
+      const result = CreateVariantPriceBody.safeParse(invalid);
+      expect(result.success).toBe(false);
+    });
+
+    it('should validate VariantResponse with currency field', () => {
+      const valid = {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        sku: 'SKU123',
+        title: 'Test Variant',
+        price_cents: 2999,
+        currency: 'USD',
+        image_url: null,
+      };
+      const result = VariantResponse.safeParse(valid);
+      expect(result.success).toBe(true);
+    });
+
+    it('should default currency to USD in VariantResponse', () => {
+      const valid = {
+        id: '550e8400-e29b-41d4-a716-446655440000',
+        sku: 'SKU123',
+        title: 'Test Variant',
+        price_cents: 2999,
+        image_url: null,
+      };
+      const result = VariantResponse.safeParse(valid);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.currency).toBe('USD');
+      }
     });
   });
 

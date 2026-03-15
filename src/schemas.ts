@@ -35,6 +35,7 @@ export const VariantResponse = z.object({
   sku: z.string().openapi({ example: 'TEE-BLK-M' }),
   title: z.string().openapi({ example: 'Black / Medium' }),
   price_cents: z.number().int().openapi({ example: 2999 }),
+  currency: z.string().default('USD').openapi({ example: 'USD', description: 'ISO 4217 currency code (base price currency)' }),
   image_url: z.string().nullable().openapi({ example: 'https://example.com/image.jpg' }),
 }).openapi('Variant');
 
@@ -42,6 +43,7 @@ export const CreateVariantBody = z.object({
   sku: z.string().min(1).openapi({ example: 'TEE-BLK-M' }),
   title: z.string().min(1).openapi({ example: 'Black / Medium' }),
   price_cents: z.number().int().min(0).openapi({ example: 2999 }),
+  currency: z.string().length(3).optional().openapi({ example: 'EUR', description: 'ISO 4217 currency code for base price' }),
   image_url: z.string().url().optional().openapi({ example: 'https://example.com/image.jpg' }),
 }).openapi('CreateVariant');
 
@@ -49,8 +51,52 @@ export const UpdateVariantBody = z.object({
   sku: z.string().min(1).optional(),
   title: z.string().min(1).optional(),
   price_cents: z.number().int().min(0).optional(),
+  currency: z.string().length(3).optional().openapi({ example: 'EUR', description: 'ISO 4217 currency code for base price' }),
   image_url: z.string().url().nullable().optional(),
 }).openapi('UpdateVariant');
+
+export const VariantPriceCurrencyParam = z.object({
+  id: z.string().uuid().openapi({ 
+    param: { name: 'id', in: 'path' },
+    description: 'Product ID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  }),
+  variantId: z.string().uuid().openapi({ 
+    param: { name: 'variantId', in: 'path' },
+    description: 'Variant ID',
+    example: '550e8400-e29b-41d4-a716-446655440001',
+  }),
+  currencyId: z.string().uuid().openapi({ 
+    param: { name: 'currencyId', in: 'path' },
+    description: 'Currency ID (UUID from currencies table)',
+    example: '550e8400-e29b-41d4-a716-446655440002',
+  }),
+}).openapi('VariantPriceCurrencyParam');
+
+export const VariantPrice = z.object({
+  id: z.string().uuid(),
+  variant_id: z.string().uuid(),
+  currency_id: z.string().uuid(),
+  currency_code: z.string().openapi({ example: 'EUR', description: 'ISO 4217 currency code' }),
+  currency_name: z.string().openapi({ example: 'Euro' }),
+  symbol: z.string().openapi({ example: '€' }),
+  price_cents: z.number().int().openapi({ example: 2799, description: 'Price in cents/pence/centimes' }),
+}).openapi('VariantPrice');
+
+export const VariantPriceListResponse = z.object({
+  items: z.array(VariantPrice),
+}).openapi('VariantPriceList');
+
+export const CreateVariantPriceBody = z.object({
+  currency_id: z.string().uuid().openapi({ description: 'Currency ID (UUID from currencies table)' }),
+  price_cents: z.number().int().min(0).openapi({ example: 2799, description: 'Price in cents' }),
+}).openapi('CreateVariantPrice');
+
+export const VariantPriceResponse = z.object({
+  id: z.string().uuid(),
+  currency_id: z.string().uuid(),
+  price_cents: z.number().int(),
+}).openapi('VariantPrice');
 
 // ============================================================
 // PRODUCT SCHEMAS

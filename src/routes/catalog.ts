@@ -14,6 +14,7 @@ import {
   VariantResponse,
   CreateVariantBody,
   UpdateVariantBody,
+  VariantPriceCurrencyParam,
   ErrorResponse,
   DeletedResponse,
 } from '../schemas';
@@ -110,6 +111,7 @@ app.openapi(listProducts, async (c) => {
       title: v.title,
       price_cents: v.price_cents,
       image_url: v.image_url,
+      currency: v.currency ?? 'USD',
     })),
   }));
 
@@ -173,6 +175,7 @@ app.openapi(searchProducts, async (c) => {
       title: v.title,
       price_cents: v.price_cents,
       image_url: v.image_url,
+      currency: v.currency ?? 'USD',
     })),
   }));
 
@@ -218,6 +221,7 @@ app.openapi(getProduct, async (c) => {
       title: v.title,
       price_cents: v.price_cents,
       image_url: v.image_url,
+      currency: v.currency ?? 'USD',
     })),
   }, 200);
 });
@@ -315,6 +319,7 @@ app.openapi(updateProduct, async (c) => {
       title: v.title,
       price_cents: v.price_cents,
       image_url: v.image_url,
+      currency: v.currency ?? 'USD',
     })),
   }, 200);
 });
@@ -386,7 +391,7 @@ const createVariant = createRoute({
 
 app.openapi(createVariant, async (c) => {
   const { id: productId } = c.req.valid('param');
-  const { sku, title, price_cents, image_url } = c.req.valid('json');
+  const { sku, title, price_cents, currency, image_url } = c.req.valid('json');
   const db = getDb(c.var.db);
 
   const [product] = await db.query<any>(`SELECT * FROM products WHERE id = ?`, [productId]);
@@ -399,8 +404,8 @@ app.openapi(createVariant, async (c) => {
   const timestamp = now();
 
   await db.run(
-    `INSERT INTO variants (id, product_id, sku, title, price_cents, weight_g, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, productId, sku, title, price_cents, 0, image_url || null, timestamp]
+    `INSERT INTO variants (id, product_id, sku, title, price_cents, currency, weight_g, image_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, productId, sku, title, price_cents, currency ?? 'USD', 0, image_url || null, timestamp]
   );
 
   await db.run(
@@ -408,7 +413,7 @@ app.openapi(createVariant, async (c) => {
     [uuid(), sku, timestamp]
   );
 
-  return c.json({ id, sku, title, price_cents, image_url: image_url || null }, 201);
+  return c.json({ id, sku, title, price_cents, currency: currency ?? 'USD', image_url: image_url || null }, 201);
 });
 
 const updateVariant = createRoute({
@@ -462,6 +467,10 @@ app.openapi(updateVariant, async (c) => {
     updates.push('price_cents = ?');
     params.push(body.price_cents);
   }
+  if (body.currency !== undefined) {
+    updates.push('currency = ?');
+    params.push(body.currency);
+  }
   if (body.image_url !== undefined) {
     updates.push('image_url = ?');
     params.push(body.image_url);
@@ -480,6 +489,7 @@ app.openapi(updateVariant, async (c) => {
     title: variant.title,
     price_cents: variant.price_cents,
     image_url: variant.image_url,
+    currency: variant.currency ?? 'USD',
   }, 200);
 });
 
@@ -517,6 +527,141 @@ app.openapi(deleteVariant, async (c) => {
   await db.run(`DELETE FROM variants WHERE id = ?`, [variantId]);
 
   return c.json({ deleted: true as const }, 200);
+});
+
+// ============================================================
+// VARIANT PRICING (MULTI-CURRENCY)
+// ============================================================
+
+const listVariantPrices = createRoute({
+  method: 'get',
+  path: '/{id}/variants/{variantId}/prices',
+  tags: ['Products'],
+  summary: 'List prices for a variant by currency',
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  middleware: [adminOnly] as const,
+  request: { params: VariantIdParam },
+  responses: {
+    200: { content: { 'application/json': { schema: z.object({ items: z.array(z.object({ id: z.string().uuid(), currency_id: z.string().uuid(), currency_code: z.string(), currency_name: z.string(), symbol: z.string(), price_cents: z.number().int() })) }) } }, description: 'List of variant prices' },
+    404: { content: { 'application/json': { schema: ErrorResponse } }, description: 'Variant not found' },
+  },
+});
+
+app.openapi(listVariantPrices, async (c) => {
+  const { id: productId, variantId } = c.req.valid('param');
+  const db = getDb(c.var.db);
+
+  // Verify variant exists and belongs to product
+  const [variant] = await db.query<any>(
+    `SELECT id FROM variants WHERE id = ? AND product_id = ?`,
+    [variantId, productId]
+  );
+  if (!variant) throw ApiError.notFound('Variant not found');
+
+  // List prices with currency details
+  const prices = await db.query<any>(
+    `SELECT vp.id, vp.variant_id, vp.currency_id, c.code as currency_code, c.display_name as currency_name, c.symbol,
+            vp.price_cents
+     FROM variant_prices vp
+     JOIN currencies c ON vp.currency_id = c.id
+     WHERE vp.variant_id = ?
+     ORDER BY c.code ASC`,
+    [variantId]
+  );
+
+  return c.json({ items: prices || [] }, 200);
+});
+
+const upsertVariantPrice = createRoute({
+  method: 'post',
+  path: '/{id}/variants/{variantId}/prices',
+  tags: ['Products'],
+  summary: 'Set price for a variant in a specific currency',
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  middleware: [adminOnly] as const,
+  request: { params: VariantIdParam, body: { content: { 'application/json': { schema: z.object({ currency_id: z.string().uuid(), price_cents: z.number().int().min(0) }) } } } },
+  responses: {
+    200: { content: { 'application/json': { schema: z.object({ id: z.string().uuid(), price_cents: z.number().int() }) } }, description: 'Price upserted' },
+    404: { content: { 'application/json': { schema: ErrorResponse } }, description: 'Variant not found' },
+  },
+});
+
+app.openapi(upsertVariantPrice, async (c) => {
+  const { id: productId, variantId } = c.req.valid('param');
+  const { currency_id: currencyId, price_cents: priceCents } = c.req.valid('json');
+  const db = getDb(c.var.db);
+
+  // Verify variant exists and belongs to product
+  const [variant] = await db.query<any>(
+    `SELECT id FROM variants WHERE id = ? AND product_id = ?`,
+    [variantId, productId]
+  );
+  if (!variant) throw ApiError.notFound('Variant not found');
+
+  // Verify currency exists
+  const [currency] = await db.query<any>(
+    `SELECT id FROM currencies WHERE id = ? AND status = 'active'`,
+    [currencyId]
+  );
+  if (!currency) throw ApiError.notFound('Currency not found or inactive');
+
+  // Check if price already exists
+  const [existing] = await db.query<any>(
+    `SELECT id FROM variant_prices WHERE variant_id = ? AND currency_id = ?`,
+    [variantId, currencyId]
+  );
+
+  if (existing) {
+    // Update
+    await db.run(
+      `UPDATE variant_prices SET price_cents = ?, updated_at = ? WHERE id = ?`,
+      [priceCents, now(), existing.id]
+    );
+    return c.json({ id: existing.id, price_cents: priceCents }, 200);
+  } else {
+    // Insert
+    const priceId = uuid();
+    await db.run(
+      `INSERT INTO variant_prices (id, variant_id, currency_id, price_cents, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [priceId, variantId, currencyId, priceCents, now(), now()]
+    );
+    return c.json({ id: priceId, price_cents: priceCents }, 200);
+  }
+});
+
+const deleteVariantPrice = createRoute({
+  method: 'delete',
+  path: '/{id}/variants/{variantId}/prices/{currencyId}',
+  tags: ['Products'],
+  summary: 'Remove price for a specific currency',
+  security: [{ bearerAuth: ["sk_","admin:store"] }],
+  middleware: [adminOnly] as const,
+  request: { params: VariantPriceCurrencyParam },
+  responses: {
+    200: { content: { 'application/json': { schema: z.object({ deleted: z.boolean() }) } }, description: 'Price deleted' },
+    404: { content: { 'application/json': { schema: ErrorResponse } }, description: 'Variant not found' },
+  },
+});
+
+app.openapi(deleteVariantPrice, async (c) => {
+  const { id: productId, variantId, currencyId } = c.req.valid('param');
+  const db = getDb(c.var.db);
+
+  // Verify variant exists and belongs to product
+  const [variant] = await db.query<any>(
+    `SELECT id FROM variants WHERE id = ? AND product_id = ?`,
+    [variantId, productId]
+  );
+  if (!variant) throw ApiError.notFound('Variant not found');
+
+  // Delete the price
+  await db.run(
+    `DELETE FROM variant_prices WHERE variant_id = ? AND currency_id = ?`,
+    [variantId, currencyId]
+  );
+
+  return c.json({ deleted: true }, 200);
 });
 
 export { app as catalog };

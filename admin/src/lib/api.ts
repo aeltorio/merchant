@@ -125,6 +125,27 @@ export type Variant = {
   title: string;
   price_cents: number;
   image_url: string | null;
+  currency: string;
+};
+
+export type VariantPrice = {
+  id: string;
+  currency_id: string;
+  currency_code: string;
+  currency_name: string;
+  symbol: string;
+  price_cents: number;
+};
+
+export type Currency = {
+  id: string;
+  code: string;
+  display_name: string;
+  symbol: string;
+  decimal_places: number;
+  status: 'active' | 'inactive';
+  created_at: string;
+  updated_at: string;
 };
 
 export type InventoryItem = {
@@ -252,6 +273,35 @@ export const api = {
     });
   },
 
+  async listVariantPrices(productId: string, variantId: string) {
+    return request<{ items: VariantPrice[] }>(
+      `/v1/products/${productId}/variants/${variantId}/prices`
+    );
+  },
+
+  async upsertVariantPrice(
+    productId: string,
+    variantId: string,
+    data: { currency_id: string; price_cents: number }
+  ) {
+    return request<{ id: string; price_cents: number }>(
+      `/v1/products/${productId}/variants/${variantId}/prices`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+  },
+
+  async deleteVariantPrice(productId: string, variantId: string, currencyId: string) {
+    return request<{ deleted: boolean }>(
+      `/v1/products/${productId}/variants/${variantId}/prices/${currencyId}`,
+      {
+        method: 'DELETE',
+      }
+    );
+  },
+
   // Inventory
   async getInventory() {
     return request<{ items: InventoryItem[] }>('/v1/inventory');
@@ -286,6 +336,11 @@ export const api = {
     }
 
     return res.json() as Promise<{ url: string; key: string }>;
+  },
+
+  // Currencies
+  async getCurrencies() {
+    return request<{ items: Currency[] }>('/v1/currencies');
   },
 
   // Webhooks

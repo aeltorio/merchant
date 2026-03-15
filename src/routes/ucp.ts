@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import Stripe from 'stripe';
 import { getDb, type Database } from '../db';
 import { ApiError, uuid, now, type HonoEnv } from '../types';
+import { resolveVariantPrice, getCurrencyIdFromCode } from '../lib/pricing';
 
 // ============================================================
 // UCP - UNIVERSAL COMMERCE PROTOCOL
@@ -259,6 +260,12 @@ ucp.post('/ucp/v1/checkout-sessions', async (c) => {
   const resolvedItems: UCPLineItem[] = [];
   const messages: UCPMessage[] = [];
   let subtotal = 0;
+
+  // Resolve currency_id from ISO code
+  const currencyId = await getCurrencyIdFromCode(db, currency);
+  if (!currencyId) {
+    throw ApiError.invalidRequest(`Currency ${currency} not configured or inactive`);
+  }
   
   for (const item of line_items) {
     const itemId = item.item?.id;
@@ -308,8 +315,21 @@ ucp.post('/ucp/v1/checkout-sessions', async (c) => {
         severity: 'recoverable',
       });
     }
-    
-    const unitPrice = variant.price_cents;
+
+    // Resolve price from variant_prices using multi-currency pricing
+    let unitPrice: number;
+    try {
+      unitPrice = await resolveVariantPrice(db, variant.id, currencyId);
+    } catch (error) {
+      messages.push({
+        type: 'error',
+        code: 'price_not_available',
+        content: `Price not configured for variant ${variant.sku} in currency ${currency}`,
+        severity: 'recoverable',
+      });
+      continue;
+    }
+
     const totalPrice = unitPrice * quantity;
     subtotal += totalPrice;
     

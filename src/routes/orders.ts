@@ -5,6 +5,7 @@ import { authMiddleware, adminOnly } from '../middleware/auth';
 import { ApiError, uuid, now, generateOrderNumber, type HonoEnv } from '../types';
 import { validateDiscount, calculateDiscount, type Discount } from './discounts';
 import { dispatchWebhooks, type WebhookEventType } from '../lib/webhooks';
+import { resolveVariantPrice, getCurrencyIdForRegion } from '../lib/pricing';
 import {
   OrderIdParam,
   OrderResponse,
@@ -289,6 +290,23 @@ app.openapi(createTestOrder, async (c) => {
     if (!region) throw ApiError.notFound('Region not found');
   }
 
+  // Resolve currency_id from region
+  const currencyId = await getCurrencyIdForRegion(db, regionId);
+  if (!currencyId) {
+    throw ApiError.invalidRequest(
+      'Region has no currency configured. Unable to resolve prices.'
+    );
+  }
+
+  // Get region's currency code for the order
+  const [regionData] = await db.query<any>(
+    `SELECT c.code as currency_code FROM regions r
+     JOIN currencies c ON r.currency_id = c.id
+     WHERE r.id = ?`,
+    [regionId]
+  );
+  const currencyCode = regionData?.currency_code ?? 'USD';
+
   let subtotal = 0;
   const orderItems = [];
 
@@ -324,12 +342,14 @@ app.openapi(createTestOrder, async (c) => {
     
     if (totalAvailable < qty) throw ApiError.insufficientInventory(sku);
 
-    subtotal += variant.price_cents * qty;
+    // Resolve price using multi-currency helper (Option A: strict fallback)
+    const unitPriceCents = await resolveVariantPrice(db, variant.id, currencyId);
+    subtotal += unitPriceCents * qty;
     orderItems.push({
       sku,
       title: variant.title,
       qty,
-      unit_price_cents: variant.price_cents,
+      unit_price_cents: unitPriceCents,
     });
   }
 
@@ -431,9 +451,9 @@ app.openapi(createTestOrder, async (c) => {
   const orderId = uuid();
 
   await db.run(
-    `INSERT INTO orders (id, customer_id, number, status, customer_email, subtotal_cents, tax_cents, shipping_cents, total_cents, discount_code, discount_id, discount_amount_cents, created_at)
-     VALUES (?, ?, ?, 'paid', ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
-    [orderId, customerId, orderNumber, customer_email, subtotal, totalCents, discountCode, discountId, discountAmountCents, timestamp]
+    `INSERT INTO orders (id, customer_id, number, status, customer_email, subtotal_cents, tax_cents, shipping_cents, total_cents, currency, discount_code, discount_id, discount_amount_cents, created_at)
+     VALUES (?, ?, ?, 'paid', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`,
+    [orderId, customerId, orderNumber, customer_email, subtotal, totalCents, currencyCode, discountCode, discountId, discountAmountCents, timestamp]
   );
 
   for (const item of orderItems) {

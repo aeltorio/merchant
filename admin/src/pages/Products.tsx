@@ -26,6 +26,7 @@ import {
 import { api, Product, Variant } from '../lib/api';
 import { StatusBadge } from '../components/StatusBadge';
 import { Modal } from '../components/Modal';
+import { VariantPrices } from '../components/VariantPrices';
 import clsx from 'clsx';
 
 const columnHelper = createColumnHelper<Product>();
@@ -720,6 +721,19 @@ export function Products() {
                 )}
               </div>
 
+              {/* Multi-currency prices (edit mode only) */}
+              {variantMode === 'edit' && editingVariant && selectedProduct && (
+                <div
+                  className="p-3 rounded-lg space-y-2"
+                  style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)' }}
+                >
+                  <VariantPrices
+                    productId={selectedProduct.id}
+                    variantId={editingVariant.id}
+                  />
+                </div>
+              )}
+
               <div
                 className="flex gap-2 justify-end pt-4 border-t"
                 style={{ borderColor: 'var(--border)' }}
@@ -787,7 +801,9 @@ function VariantCard({ variant, onEdit }: { variant: Variant; onEdit: () => void
           {variant.sku}
         </p>
       </div>
-      <p className="font-mono text-sm">${(variant.price_cents / 100).toFixed(2)}</p>
+      <div className="text-right">
+        <p className="font-mono text-sm">{variant.currency} {(variant.price_cents / 100).toFixed(2)}</p>
+      </div>
       <Pencil size={14} style={{ color: 'var(--text-muted)' }} />
     </div>
   );

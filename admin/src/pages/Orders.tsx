@@ -96,9 +96,14 @@ export function Orders() {
       columnHelper.accessor((row) => row.amounts.total_cents, {
         id: 'total',
         header: 'Total',
-        cell: (info) => (
-          <span className="font-mono text-sm">${(info.getValue() / 100).toFixed(2)}</span>
-        ),
+        cell: (info) => {
+          const row = info.row.original;
+          const formatted = (info.getValue() / 100).toFixed(2);
+          const code = row.amounts.currency.toUpperCase();
+          return (
+            <span className="font-mono text-sm">{code} {formatted}</span>
+          );
+        },
       }),
       columnHelper.accessor('created_at', {
         header: 'Date',
@@ -123,7 +128,11 @@ export function Orders() {
     getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (cents: number, currency?: string) => {
+    const code = currency?.toUpperCase() || 'USD';
+    const formatted = (cents / 100).toFixed(2);
+    return `${code} ${formatted}`;
+  };
 
   return (
     <div>
@@ -364,7 +373,7 @@ export function Orders() {
                           </p>
                         </div>
                         <p className="font-mono">
-                          {formatCurrency(item.unit_price_cents * item.qty)}
+                          {formatCurrency(item.unit_price_cents * item.qty, selectedOrder.amounts.currency)}
                         </p>
                       </div>
                     ))}
@@ -376,22 +385,22 @@ export function Orders() {
                   <div className="space-y-1 text-sm font-mono">
                     <div className="flex justify-between">
                       <span style={{ color: 'var(--text-secondary)' }}>Subtotal</span>
-                      <span>{formatCurrency(selectedOrder.amounts.subtotal_cents)}</span>
+                      <span>{formatCurrency(selectedOrder.amounts.subtotal_cents, selectedOrder.amounts.currency)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: 'var(--text-secondary)' }}>Tax</span>
-                      <span>{formatCurrency(selectedOrder.amounts.tax_cents)}</span>
+                      <span>{formatCurrency(selectedOrder.amounts.tax_cents, selectedOrder.amounts.currency)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span style={{ color: 'var(--text-secondary)' }}>Shipping</span>
-                      <span>{formatCurrency(selectedOrder.amounts.shipping_cents)}</span>
+                      <span>{formatCurrency(selectedOrder.amounts.shipping_cents, selectedOrder.amounts.currency)}</span>
                     </div>
                     <div
                       className="flex justify-between pt-2 mt-2 border-t font-semibold"
                       style={{ borderColor: 'var(--border)' }}
                     >
                       <span>Total</span>
-                      <span>{formatCurrency(selectedOrder.amounts.total_cents)}</span>
+                      <span>{formatCurrency(selectedOrder.amounts.total_cents, selectedOrder.amounts.currency)}</span>
                     </div>
                   </div>
                 </div>

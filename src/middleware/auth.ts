@@ -70,19 +70,33 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
       throw ApiError.forbidden(`${requiredPerm} permission required`);
     }
 
-    if (perms.includes(c.env.ADMIN_AUTH0_PERMISSION || 'auth0:admin:api')) {
-      c.set('auth', {
-        role: ['admin', 'superadmin'],
-        stripeSecretKey,
-        stripeWebhookSecret,
-      });
-      await next();
-      return;
+    // Build a list of roles based on permissions in the token.
+    // This ensures we include all matching permissions (e.g. admin + authadmin + databaseadmin).
+    const roles: string[] = [];
+
+    // `requiredPerm` is used as an access gate; its presence implies at least `admin`.
+    if (perms.includes(requiredPerm)) {
+      roles.push('admin');
     }
 
-    // treat a valid Auth0 token as an admin user
+    const authAdminPerm = c.env.ADMIN_AUTH0_PERMISSION || 'auth0:admin:api';
+    if (perms.includes(authAdminPerm)) {
+      roles.push('authadmin');
+    }
+
+    const databasePerm = c.env.DATABASE_PERMISSION || 'admin:database';
+    if (perms.includes(databasePerm)) {
+      roles.push('databaseadmin');
+    }
+
+    if (roles.length === 0) {
+      // This should not happen because we already checked requiredPerm above,
+      // but keep a guard in case requiredPerm is changed in the future.
+      throw ApiError.forbidden(`${requiredPerm} permission required`);
+    }
+
     c.set('auth', {
-      role: 'admin',
+      role: roles.length === 1 ? roles[0] : roles,
       stripeSecretKey,
       stripeWebhookSecret,
     });
@@ -140,13 +154,29 @@ export const superAdminOnly = createMiddleware<HonoEnv>(async (c, next) => {
   const auth = c.get('auth');
 
   if (Array.isArray(auth.role)) {
-    if (!auth.role.includes('superadmin')) {
+    if (!auth.role.includes('authadmin')) {
       console.warn('Superadmin access required, but user has roles:', auth.role);
       throw ApiError.forbidden('Superadmin access required');
     }
-  } else if (auth.role !== 'superadmin') {
+  } else if (auth.role !== 'authadmin') {
     console.warn('Superadmin access required, but user has role:', auth.role);
     throw ApiError.forbidden('Superadmin access required');
+  }
+
+  await next();
+});
+
+export const databaseAdminOnly = createMiddleware<HonoEnv>(async (c, next) => {
+  const auth = c.get('auth');
+
+  if (Array.isArray(auth.role)) {
+    if (!auth.role.includes('databaseadmin')) {
+      console.warn('Database admin access required, but user has roles:', auth.role);
+      throw ApiError.forbidden('Database admin access required');
+    }
+  } else if (auth.role !== 'databaseadmin') {
+    console.warn('Database admin access required, but user has role:', auth.role);
+    throw ApiError.forbidden('Database admin access required');
   }
 
   await next();

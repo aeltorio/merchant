@@ -104,6 +104,17 @@ async function apiWithRetry(path: string, body?: any, maxRetries = 5): Promise<a
   throw new Error(`Max retries exceeded for ${path}`);
 }
 
+/**
+ * Convert cents at a given rate and round to the nearest cent.
+ * Rates are expressed relative to EUR (base currency for seeded products).
+ */
+function convertCents(cents: number, rate: number): number {
+  return Math.round(cents * rate);
+}
+
+const EUR_TO_USD = 1.14;
+const EUR_TO_GBP = 0.86;
+
 async function seedRegions() {
   console.log('📋 Fetching existing currencies and countries...');
   
@@ -275,6 +286,7 @@ async function seedRegions() {
   return {
     warehouses: { fr: warehouse_fr.id, it: warehouse_it.id },
     regions: { eu: region_eu.id, uk: region_uk.id, us: region_us.id, world: region_world.id },
+    currencyMap,
   };
 }
 
@@ -338,7 +350,36 @@ async function seed() {
 
       console.log(`   └─ ${variant.sku}`);
 
-      await api(`/v1/products/${product.id}/variants`, variant);
+      // Create variant (base price is in EUR)
+      const createdVariant = await api(`/v1/products/${product.id}/variants`, {
+        ...variant,
+        currency: 'EUR',
+      });
+
+      // Add EUR/USD/GBP prices based on fixed conversion rates (EUR is the base currency here)
+      const eurCurrencyId = regionData.currencyMap?.EUR;
+      const usdCurrencyId = regionData.currencyMap?.USD;
+      const gbpCurrencyId = regionData.currencyMap?.GBP;
+
+      if (eurCurrencyId) {
+        await api(`/v1/products/${product.id}/variants/${createdVariant.id}/prices`, {
+          currency_id: eurCurrencyId,
+          price_cents: variant.price_cents,
+        });
+      }
+
+      if (usdCurrencyId) {
+        await api(`/v1/products/${product.id}/variants/${createdVariant.id}/prices`, {
+          currency_id: usdCurrencyId,
+          price_cents: convertCents(variant.price_cents, EUR_TO_USD),
+        });
+      }
+      if (gbpCurrencyId) {
+        await api(`/v1/products/${product.id}/variants/${createdVariant.id}/prices`, {
+          currency_id: gbpCurrencyId,
+          price_cents: convertCents(variant.price_cents, EUR_TO_GBP),
+        });
+      }
 
       // Add warehouse inventory
       // Special case: 10 TEE-BLK-S in Italy, rest in France
@@ -391,6 +432,13 @@ async function seed() {
           { sku: 'CAP-NVY', qty: 2 },
         ],
       },
+      {
+        customer_email: 'oliver@eu.example.com',
+        items: [
+          { sku: 'STICKER-5PK', qty: 3 },
+          { sku: 'TEE-BLK-S', qty: 1 },
+        ],
+      },
     ],
     uk: [
       {
@@ -417,13 +465,6 @@ async function seed() {
       {
         customer_email: 'ava@us.example.com',
         items: [{ sku: 'HOOD-GRY-L', qty: 2 }],
-      },
-      {
-        customer_email: 'liam@us.example.com',
-        items: [
-          { sku: 'TEE-BLK-M', qty: 1 },
-          { sku: 'CAP-NVY', qty: 1 },
-        ],
       },
     ],
   };

@@ -1,7 +1,7 @@
 import { OpenAPIHono, createRoute } from '@hono/zod-openapi';
 import { z } from '@hono/zod-openapi';
 import { getDb } from '../db';
-import { authMiddleware, adminOnly } from '../middleware/auth';
+import { authMiddleware, adminOnly, databaseAdminOnly } from '../middleware/auth';
 import { ApiError, now, type HonoEnv } from '../types';
 import { SetupStripeBody, OkResponse, ErrorResponse } from '../schemas';
 
@@ -90,6 +90,70 @@ app.openapi(setupStripe, async (c) => {
      ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = ?`,
     [configValue, now(), configValue, now()]
   );
+
+  return c.json({ ok: true as const }, 200);
+});
+
+const resetDatabase = createRoute({
+  method: 'post',
+  path: '/reset',
+  tags: ['Setup'],
+  summary: 'Wipe and reset the database',
+  description: 'Clears all data so init/seed can be rerun. Requires database admin role (JWT only).',
+  security: [{ bearerAuth: ["admin:database"] }],
+  middleware: [authMiddleware, databaseAdminOnly] as const,
+  responses: {
+    200: { content: { 'application/json': { schema: OkResponse } }, description: 'Database reset' },
+  },
+});
+
+app.openapi(resetDatabase, async (c) => {
+  const db = getDb(c.var.db);
+
+  // Disable foreign key checks to allow deletion in any order
+  await db.run('PRAGMA foreign_keys = OFF');
+
+  const tables = [
+    'order_items',
+    'orders',
+    'cart_items',
+    'carts',
+    'inventory_logs',
+    'inventory',
+    'variant_prices',
+    'variants',
+    'products',
+    'warehouse_inventory_logs',
+    'warehouse_inventory',
+    'region_shipping_rates',
+    'region_warehouses',
+    'region_countries',
+    'regions',
+    'shipping_rate_prices',
+    'shipping_rates',
+    'warehouses',
+    'countries',
+    'currencies',
+    'discount_usage',
+    'discounts',
+    'refunds',
+    'customer_addresses',
+    'customers',
+    'events',
+    'webhook_deliveries',
+    'webhooks',
+    'oauth_tokens',
+    'oauth_authorizations',
+    'oauth_clients',
+    'config',
+    'api_keys',
+  ];
+
+  for (const table of tables) {
+    await db.run(`DELETE FROM ${table}`);
+  }
+
+  await db.run('PRAGMA foreign_keys = ON');
 
   return c.json({ ok: true as const }, 200);
 });

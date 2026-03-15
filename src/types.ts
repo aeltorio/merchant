@@ -38,6 +38,13 @@ export type Env = {
    * user when hitting `/api/__auth0/autopermissions`.
    */
   AUTH0_AUTOMATIC_PERMISSIONS?: string;
+
+  /**
+   * Permission string .  Defaults to
+   * `admin:database` when not set.
+   */
+  DATABASE_PERMISSION?: string;
+
 };
 
 export type DOStub = {
@@ -56,7 +63,7 @@ export type HonoEnv = {
   Variables: Variables;
 };
 
-export type AuthRole = 'public' | 'admin' | 'oauth' | 'superadmin';
+export type AuthRole = 'public' | 'admin' | 'oauth' | 'authadmin' | 'databaseadmin';
 
 export type AuthContext = {
   role: AuthRole | AuthRole[];

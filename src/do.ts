@@ -223,7 +223,8 @@ CREATE TABLE IF NOT EXISTS cart_items (
   sku TEXT NOT NULL,
   title TEXT NOT NULL,
   qty INTEGER NOT NULL,
-  unit_price_cents INTEGER NOT NULL
+  unit_price_cents INTEGER NOT NULL,
+  currency TEXT NOT NULL DEFAULT 'USD'
 );
 
 CREATE TABLE IF NOT EXISTS orders (

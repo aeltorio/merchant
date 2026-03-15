@@ -5,6 +5,7 @@ import { getDb } from '../db';
 import { authMiddleware } from '../middleware/auth';
 import { ApiError, uuid, now, isValidEmail, type HonoEnv } from '../types';
 import { validateDiscount, calculateDiscount, type Discount } from './discounts';
+import { resolveVariantPrice, getCurrencyIdForRegion } from '../lib/pricing';
 import {
   CartIdParam,
   CartResponse,
@@ -182,6 +183,14 @@ app.openapi(addCartItems, async (c) => {
   if (!cart) throw ApiError.notFound('Cart not found');
   if (cart.status !== 'open') throw ApiError.conflict('Cart is not open');
 
+  // Resolve currency_id from cart's region
+  const currencyId = await getCurrencyIdForRegion(db, cart.region_id);
+  if (!currencyId) {
+    throw ApiError.invalidRequest(
+      'Cart region has no currency configured. Unable to resolve prices.'
+    );
+  }
+
   const validatedItems = [];
   for (const { sku, qty } of items) {
     const [variant] = await db.query<any>(`SELECT * FROM variants WHERE sku = ?`, [sku]);
@@ -192,11 +201,15 @@ app.openapi(addCartItems, async (c) => {
     const available = (inv?.on_hand ?? 0) - (inv?.reserved ?? 0);
     if (available < qty) throw ApiError.insufficientInventory(sku);
 
+    // Resolve price using multi-currency helper (Option A: strict fallback)
+    const unitPriceCents = await resolveVariantPrice(db, variant.id, currencyId);
+
     validatedItems.push({
       sku,
       title: variant.title,
       qty,
-      unit_price_cents: variant.price_cents,
+      unit_price_cents: unitPriceCents,
+      currency: cart.currency, // Snapshot cart's currency at item level
     });
   }
 
@@ -204,8 +217,8 @@ app.openapi(addCartItems, async (c) => {
 
   for (const item of validatedItems) {
     await db.run(
-      `INSERT INTO cart_items (id, cart_id, sku, title, qty, unit_price_cents) VALUES (?, ?, ?, ?, ?, ?)`,
-      [uuid(), cartId, item.sku, item.title, item.qty, item.unit_price_cents]
+      `INSERT INTO cart_items (id, cart_id, sku, title, qty, unit_price_cents, currency) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [uuid(), cartId, item.sku, item.title, item.qty, item.unit_price_cents, item.currency]
     );
   }
 
@@ -465,7 +478,7 @@ app.openapi(checkoutCart, async (c) => {
 
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = items.map((item) => ({
     price_data: {
-      currency: 'usd',
+      currency: cart.currency.toLowerCase(),
       product_data: { name: item.title },
       unit_amount: item.unit_price_cents,
     },
@@ -487,12 +500,12 @@ app.openapi(checkoutCart, async (c) => {
 
         if (discount.type === 'percentage' && discount.max_discount_cents) {
           couponParams.amount_off = discountAmountCents;
-          couponParams.currency = 'usd';
+          couponParams.currency = cart.currency.toLowerCase();
         } else if (discount.type === 'percentage') {
           couponParams.percent_off = discount.value;
         } else {
           couponParams.amount_off = discount.value;
-          couponParams.currency = 'usd';
+          couponParams.currency = cart.currency.toLowerCase();
         }
 
         const coupon = await stripe.coupons.create(couponParams);
@@ -513,7 +526,7 @@ app.openapi(checkoutCart, async (c) => {
     {
       shipping_rate_data: {
         type: 'fixed_amount',
-        fixed_amount: { amount: 0, currency: 'usd' },
+        fixed_amount: { amount: 0, currency: cart.currency.toLowerCase() },
         display_name: 'Standard Shipping',
         delivery_estimate: {
           minimum: { unit: 'business_day', value: 5 },

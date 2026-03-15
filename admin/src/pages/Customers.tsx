@@ -110,7 +110,11 @@ export function Customers() {
     getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const formatCurrency = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (cents: number, currency?: string) => {
+    const code = currency?.toUpperCase() || 'USD';
+    const formatted = (cents / 100).toFixed(2);
+    return `${code} ${formatted}`;
+  };
 
   return (
     <div>
@@ -410,7 +414,7 @@ export function Customers() {
                         </div>
                         <div className="text-right">
                           <p className="font-mono text-sm">
-                            {formatCurrency(order.amounts.total_cents)}
+                            {formatCurrency(order.amounts.total_cents, order.amounts.currency)}
                           </p>
                           <p
                             className="text-xs font-mono capitalize"
