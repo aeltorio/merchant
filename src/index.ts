@@ -16,6 +16,7 @@ import { ucp } from './routes/ucp';
 import { auth0Routes } from './routes/auth0';
 import { regions } from './routes/regions';
 import { rateLimitMiddleware } from './middleware/rate-limit';
+import { ai } from './routes/ai';
 import { ApiError, type Env, type DOStub } from './types';
 import { MerchantDO } from './do';
 
@@ -69,6 +70,7 @@ app.onError((err, c) => {
 app.get('/', (c) => c.json({ name: 'merchant', version: '0.1.0', ok: true }));
 
 app.route('/v1/setup', setup);
+app.route('/v1/ai', ai);
 app.route('/v1/products', catalog);
 app.route('/v1/inventory', inventory);
 app.route('/v1/carts', checkout);

@@ -88,6 +88,12 @@ export const authMiddleware = createMiddleware<HonoEnv>(async (c, next) => {
     if (perms.includes(databasePerm)) {
       roles.push('databaseadmin');
     }
+    
+    const aiPerm = c.env.AI_PERMISSION || 'ai:api';
+    if (perms.includes(aiPerm)) {
+      roles.push('aiadmin');
+    }
+
 
     if (roles.length === 0) {
       // This should not happen because we already checked requiredPerm above,
@@ -177,6 +183,22 @@ export const databaseAdminOnly = createMiddleware<HonoEnv>(async (c, next) => {
   } else if (auth.role !== 'databaseadmin') {
     console.warn('Database admin access required, but user has role:', auth.role);
     throw ApiError.forbidden('Database admin access required');
+  }
+
+  await next();
+});
+
+export const aiAccessOnly = createMiddleware<HonoEnv>(async (c, next) => {
+  const auth = c.get('auth');
+
+  if (Array.isArray(auth.role)) {
+    if (!auth.role.includes('aiadmin')) {
+      console.warn('AI admin access required, but user has roles:', auth.role);
+      throw ApiError.forbidden('AI admin access required');
+    }
+  } else if (auth.role !== 'aiadmin') {
+    console.warn('AI admin access required, but user has role:', auth.role);
+    throw ApiError.forbidden('AI admin access required');
   }
 
   await next();

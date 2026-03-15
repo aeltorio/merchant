@@ -45,6 +45,28 @@ export type Env = {
    */
   DATABASE_PERMISSION?: string;
 
+  /**
+   * Groq / OpenAI-compatible API key for product description AI translation.
+   */
+  AI_API_KEY?: string;
+
+  /**
+   * Model name, e.g. "llama-3.3-70b-versatile" (Groq) or "gpt-4o-mini" (OpenAI).
+   */
+  AI_MODEL?: string;
+
+  /**
+   * Base URL of the AI API — must NOT include a trailing slash.
+   * e.g. "https://api.groq.com/openai/v1"
+   */
+  AI_API_URL?: string;
+
+  /**
+   * Permission string required to access the AI parameters route.
+   * e.g. "ai:api"
+   */
+  AI_PERMISSION?: string;
+
 };
 
 export type DOStub = {
@@ -63,7 +85,7 @@ export type HonoEnv = {
   Variables: Variables;
 };
 
-export type AuthRole = 'public' | 'admin' | 'oauth' | 'authadmin' | 'databaseadmin';
+export type AuthRole = 'public' | 'admin' | 'oauth' | 'authadmin' | 'databaseadmin' | 'aiadmin';
 
 export type AuthContext = {
   role: AuthRole | AuthRole[];
